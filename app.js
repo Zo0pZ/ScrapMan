@@ -44,6 +44,23 @@ function haversine(a, b) {
   return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
 }
 
+/* ---------- geocoding (postcodes.io, free, no key) ---------- */
+async function geocodePostcode(postcode) {
+  const clean = postcode.trim().replace(/\s+/g, "");
+  if (!clean) return null;
+  try {
+    const res = await fetch(
+      `https://api.postcodes.io/postcodes/${encodeURIComponent(clean)}`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.status !== 200 || !data.result) return null;
+    return { lat: data.result.latitude, lng: data.result.longitude };
+  } catch {
+    return null;
+  }
+}
+
 /* ---------- jobs screen ---------- */
 function getAllJobs() {
   const extra = JSON.parse(localStorage.getItem("scrapman_listings") || "[]");
@@ -225,23 +242,45 @@ document.getElementById("weightGroup").addEventListener("click", e => {
   selectedWeight = pill.dataset.weight;
 });
 
-document.getElementById("listForm").addEventListener("submit", e => {
+document.getElementById("postcode").addEventListener("input", () => {
+  document.getElementById("postcode").setCustomValidity("");
+});
+
+document.getElementById("listForm").addEventListener("submit", async e => {
   e.preventDefault();
+
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  const postcodeInput = document.getElementById("postcode");
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Finding your location…";
+
+  const coords = await geocodePostcode(postcodeInput.value);
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = "List it — free";
+
+  if (!coords) {
+    postcodeInput.setCustomValidity("We couldn't find that postcode — please check it.");
+    postcodeInput.reportValidity();
+    return;
+  }
+  postcodeInput.setCustomValidity("");
+
   const listings = JSON.parse(localStorage.getItem("scrapman_listings") || "[]");
-  const jitter = () => (Math.random() - 0.5) * 0.06;
   const newListing = {
     id: 1000 + listings.length,
     title: document.getElementById("itemTitle").value,
     type: document.getElementById("metalType").value || "mixed",
     weight: selectedWeight || "small",
-    lat: DEPOT.lat + jitter(),
-    lng: DEPOT.lng + jitter(),
-    address: document.getElementById("postcode").value,
+    lat: coords.lat,
+    lng: coords.lng,
+    address: postcodeInput.value.toUpperCase(),
     urgency: document.getElementById("urgency").value,
     icon: "\u{2699}️"
   };
   listings.push(newListing);
   localStorage.setItem("scrapman_listings", JSON.stringify(listings));
+
   e.target.reset();
   document.getElementById("photoPreview").style.backgroundImage = "";
   document.getElementById("photoPreview").textContent = "Tap to add a photo";
@@ -252,3 +291,10 @@ document.getElementById("listForm").addEventListener("submit", e => {
 
 /* ---------- init ---------- */
 renderJobs();
+
+/* ---------- PWA service worker ---------- */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
