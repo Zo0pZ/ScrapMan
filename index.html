@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ScrapMan &mdash; Scrap collection, sorted</title>
+<meta name="description" content="List scrap metal in seconds. Scrap men plan smarter routes and stop driving around aimlessly.">
+<meta name="theme-color" content="#111111">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+
+<div class="app-shell">
+
+  <header class="app-header">
+    <div class="brand">
+      <img src="icon.svg" alt="" class="brand-mark">
+      <span class="brand-name">Scrap<span class="accent">Man</span></span>
+    </div>
+    <button class="icon-btn" id="accountBtn" aria-label="Account">&#9881;</button>
+  </header>
+
+  <main class="screens">
+
+    <!-- HOME -->
+    <section class="screen active" id="screen-home">
+      <div class="hero">
+        <p class="eyebrow">Doo-be-doo &middot; he'll haul your scrap away</p>
+        <h1>Stop driving around aimlessly.</h1>
+        <p class="hero-sub">ScrapMan matches households with scrap metal to collectors who need it &mdash; and plans the route so you're never guessing where to go next.</p>
+      </div>
+
+      <div class="cta-row">
+        <button class="cta cta-primary" data-nav="list">I've got scrap to clear</button>
+        <button class="cta cta-dark" data-nav="jobs">I collect scrap for a living</button>
+      </div>
+
+      <div class="value-props">
+        <div class="value-card">
+          <span class="vc-icon">&#128506;&#65039;</span>
+          <h3>Plan your route</h3>
+          <p>Jobs ordered by distance automatically, not the order they came in.</p>
+        </div>
+        <div class="value-card">
+          <span class="vc-icon">&#128176;</span>
+          <h3>Free to list</h3>
+          <p>Households never pay a penny. Collectors pay per job, no contracts.</p>
+        </div>
+        <div class="value-card">
+          <span class="vc-icon">&#9989;</span>
+          <h3>Verified collectors</h3>
+          <p>Badge-checked scrap men, ratings on every job.</p>
+        </div>
+      </div>
+
+      <button class="link-btn" data-nav="pricing">See pricing &rarr;</button>
+    </section>
+
+    <!-- LIST SCRAP (public) -->
+    <section class="screen" id="screen-list">
+      <h2 class="screen-title">List your scrap</h2>
+      <p class="screen-sub">Takes about 30 seconds. It's free.</p>
+
+      <form id="listForm" class="stack-form">
+        <label class="field">
+          <span>Photo</span>
+          <input type="file" accept="image/*" id="photoInput">
+          <div class="photo-preview" id="photoPreview">Tap to add a photo</div>
+        </label>
+
+        <label class="field">
+          <span>What is it?</span>
+          <input type="text" id="itemTitle" placeholder="e.g. Old washing machine, copper pipe, car battery" required>
+        </label>
+
+        <label class="field">
+          <span>Metal type</span>
+          <select id="metalType" required>
+            <option value="">Choose one</option>
+            <option value="ferrous">Ferrous (steel / iron)</option>
+            <option value="nonferrous">Non-ferrous (copper / brass / ali)</option>
+            <option value="appliance">Appliance / white goods</option>
+            <option value="mixed">Mixed / not sure</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Roughly how much?</span>
+          <div class="pill-group" id="weightGroup">
+            <button type="button" class="pill" data-weight="small">Car boot</button>
+            <button type="button" class="pill" data-weight="medium">Trailer load</button>
+            <button type="button" class="pill" data-weight="large">Skip load</button>
+          </div>
+        </label>
+
+        <label class="field">
+          <span>Postcode</span>
+          <input type="text" id="postcode" placeholder="e.g. B15 2TT" required>
+        </label>
+
+        <label class="field">
+          <span>How soon?</span>
+          <select id="urgency">
+            <option value="today">Today if possible</option>
+            <option value="week" selected>This week</option>
+            <option value="norush">No rush</option>
+          </select>
+        </label>
+
+        <button type="submit" class="cta cta-primary full-width">List it &mdash; free</button>
+      </form>
+    </section>
+
+    <!-- LIST CONFIRMATION -->
+    <section class="screen" id="screen-confirm">
+      <div class="confirm-box">
+        <span class="confirm-icon">&#9989;</span>
+        <h2>You're on the map</h2>
+        <p>Your listing is live. Nearby collectors will see it on their route planner &mdash; you'll get a message when someone's on the way.</p>
+        <button class="cta cta-dark full-width" data-nav="home">Back to home</button>
+      </div>
+    </section>
+
+    <!-- FIND JOBS (collector) -->
+    <section class="screen" id="screen-jobs">
+      <h2 class="screen-title">Jobs near you</h2>
+      <div class="filter-row" id="filterRow">
+        <button class="chip active" data-filter="all">All</button>
+        <button class="chip" data-filter="ferrous">Ferrous</button>
+        <button class="chip" data-filter="nonferrous">Non-ferrous</button>
+        <button class="chip" data-filter="appliance">Appliances</button>
+      </div>
+      <div id="jobsMap" class="mini-map"></div>
+      <div class="job-list" id="jobList"></div>
+    </section>
+
+    <!-- ROUTE -->
+    <section class="screen" id="screen-route">
+      <h2 class="screen-title">Today's route</h2>
+      <div id="routeEmpty" class="empty-state">
+        <span class="vc-icon">&#128506;&#65039;</span>
+        <p>Add jobs from <strong>Jobs near you</strong> to build your route.</p>
+        <button class="cta cta-dark" data-nav="jobs">Find jobs</button>
+      </div>
+      <div id="routeContent" class="hidden">
+        <div id="routeMap" class="mini-map"></div>
+        <div class="route-stats" id="routeStats"></div>
+        <ol class="route-list" id="routeList"></ol>
+      </div>
+    </section>
+
+    <!-- PRICING -->
+    <section class="screen" id="screen-pricing">
+      <h2 class="screen-title">Simple, cheap pricing</h2>
+      <p class="screen-sub">Free for households. Collectors only pay for what they use.</p>
+
+      <div class="price-card">
+        <h3>Free <span class="price-tag">&pound;0</span></h3>
+        <p class="price-who">For households listing scrap</p>
+        <ul>
+          <li>Unlimited listings</li>
+          <li>Photo &amp; postcode matching</li>
+          <li>Message a collector directly</li>
+        </ul>
+      </div>
+
+      <div class="price-card">
+        <h3>Pay-per-job <span class="price-tag">&pound;1.50</span></h3>
+        <p class="price-who">For collectors &mdash; no contract</p>
+        <ul>
+          <li>Pay only when you accept a job</li>
+          <li>Full job feed access</li>
+          <li>Basic distance sorting</li>
+        </ul>
+      </div>
+
+      <div class="price-card highlight">
+        <span class="badge">Most popular</span>
+        <h3>ScrapMan Pro <span class="price-tag">&pound;6.99<small>/mo</small></span></h3>
+        <p class="price-who">For collectors doing this daily</p>
+        <ul>
+          <li>Unlimited leads, no per-job fee</li>
+          <li>Route planner &amp; time-saved tracking</li>
+          <li>Priority on new listings near you</li>
+        </ul>
+      </div>
+
+      <div class="extras">
+        <div class="extra-row"><span>Verified badge</span><strong>&pound;4.99 one-off</strong></div>
+        <div class="extra-row"><span>Boost my listing (faster pickup)</span><strong>&pound;1.99</strong></div>
+      </div>
+    </section>
+
+  </main>
+
+  <nav class="tab-bar">
+    <button class="tab active" data-nav="home"><span>&#127968;</span>Home</button>
+    <button class="tab" data-nav="list"><span>&#128247;</span>List</button>
+    <button class="tab" data-nav="jobs"><span>&#128230;</span>Jobs</button>
+    <button class="tab" data-nav="route"><span>&#128506;&#65039;</span>Route</button>
+    <button class="tab" data-nav="pricing"><span>&#128176;</span>Pricing</button>
+  </nav>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

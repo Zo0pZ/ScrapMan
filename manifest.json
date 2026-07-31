@@ -1,0 +1,12 @@
+{
+  "name": "ScrapMan",
+  "short_name": "ScrapMan",
+  "description": "List scrap metal in seconds. Scrap men plan smarter routes.",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#f4f3ef",
+  "theme_color": "#111111",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
