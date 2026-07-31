@@ -3,19 +3,25 @@
 const DEPOT = { lat: 52.4862, lng: -1.8904, label: "Your start point (Birmingham)" };
 
 const MOCK_JOBS = [
-  { id: 1, title: "Old washing machine", type: "appliance", weight: "medium", lat: 52.4780, lng: -1.9025, address: "Edgbaston, B15", urgency: "today", icon: "\u{1F9FA}" },
-  { id: 2, title: "Copper pipe offcuts", type: "nonferrous", weight: "small", lat: 52.4915, lng: -1.9200, address: "Ladywood, B16", urgency: "week", icon: "\u{1F527}" },
-  { id: 3, title: "Steel garden gate + railings", type: "ferrous", weight: "medium", lat: 52.4700, lng: -1.8800, address: "Moseley, B13", urgency: "norush", icon: "\u{1F6AA}" },
-  { id: 4, title: "Dead car battery x4", type: "nonferrous", weight: "small", lat: 52.5010, lng: -1.8700, address: "Aston, B6", urgency: "today", icon: "\u{1F50B}" },
-  { id: 5, title: "Fridge freezer, cooker, dishwasher", type: "appliance", weight: "large", lat: 52.4550, lng: -1.9300, address: "Selly Oak, B29", urgency: "week", icon: "\u{1F9CA}" },
-  { id: 6, title: "Scaffold poles, mixed lengths", type: "ferrous", weight: "large", lat: 52.4990, lng: -1.9100, address: "Hockley, B18", urgency: "norush", icon: "\u{1F3D7}️" },
-  { id: 7, title: "Brass fittings, old radiators", type: "nonferrous", weight: "medium", lat: 52.4650, lng: -1.8600, address: "Sparkbrook, B11", urgency: "today", icon: "\u{1F6BF}" },
-  { id: 8, title: "Skip-load mixed metal, house clearance", type: "ferrous", weight: "large", lat: 52.5100, lng: -1.9350, address: "Handsworth, B21", urgency: "week", icon: "\u{1F5D1}️" }
+  { id: 1, title: "Old washing machine", type: "appliance", weight: "medium", lat: 52.4780, lng: -1.9025, address: "Edgbaston, B15", urgency: "today" },
+  { id: 2, title: "Copper pipe offcuts", type: "nonferrous", weight: "small", lat: 52.4915, lng: -1.9200, address: "Ladywood, B16", urgency: "week" },
+  { id: 3, title: "Steel garden gate + railings", type: "ferrous", weight: "medium", lat: 52.4700, lng: -1.8800, address: "Moseley, B13", urgency: "norush" },
+  { id: 4, title: "Dead car battery x4", type: "nonferrous", weight: "small", lat: 52.5010, lng: -1.8700, address: "Aston, B6", urgency: "today" },
+  { id: 5, title: "Fridge freezer, cooker, dishwasher", type: "appliance", weight: "large", lat: 52.4550, lng: -1.9300, address: "Selly Oak, B29", urgency: "week" },
+  { id: 6, title: "Scaffold poles, mixed lengths", type: "ferrous", weight: "large", lat: 52.4990, lng: -1.9100, address: "Hockley, B18", urgency: "norush" },
+  { id: 7, title: "Brass fittings, old radiators", type: "nonferrous", weight: "medium", lat: 52.4650, lng: -1.8600, address: "Sparkbrook, B11", urgency: "today" },
+  { id: 8, title: "Skip-load mixed metal, house clearance", type: "ferrous", weight: "large", lat: 52.5100, lng: -1.9350, address: "Handsworth, B21", urgency: "week" }
 ];
 
 const WEIGHT_LABEL = { small: "Car boot", medium: "Trailer load", large: "Skip load" };
 const URGENCY_LABEL = { today: "Today", week: "This week", norush: "No rush" };
 const TYPE_LABEL = { ferrous: "Ferrous", nonferrous: "Non-ferrous", appliance: "Appliance", mixed: "Mixed" };
+const TYPE_ICON = {
+  ferrous: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>',
+  nonferrous: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2-2 2.6-2.6Z"/></svg>',
+  appliance: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="5" y1="9" x2="19" y2="9"/><circle cx="9" cy="6" r="0.6" fill="currentColor" stroke="none"/></svg>',
+  mixed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="10" width="9" height="9" rx="1.5"/><circle cx="16.5" cy="9.5" r="5"/></svg>'
+};
 
 let routeIds = JSON.parse(localStorage.getItem("scrapman_route") || "[]");
 let activeFilter = "all";
@@ -76,7 +82,7 @@ function renderJobs() {
 
   list.innerHTML = jobs.map(j => `
     <div class="job-card">
-      <span class="job-icon">${j.icon || "\u{2699}️"}</span>
+      <span class="job-icon" aria-hidden="true">${TYPE_ICON[j.type] || TYPE_ICON.mixed}</span>
       <div class="job-body">
         <h4>${j.title}</h4>
         <p class="job-meta">${j.address} &middot; ${j.dist.toFixed(1)} mi away</p>
@@ -126,8 +132,8 @@ function initJobsMap() {
   getAllJobs().filter(j => activeFilter === "all" || j.type === activeFilter).forEach(j => {
     const marker = L.circleMarker([j.lat, j.lng], {
       radius: 8,
-      color: routeIds.includes(j.id) ? "#111111" : "#FF6B00",
-      fillColor: routeIds.includes(j.id) ? "#FFC400" : "#FF6B00",
+      color: routeIds.includes(j.id) ? "#1e293b" : "#059669",
+      fillColor: routeIds.includes(j.id) ? "#334155" : "#059669",
       fillOpacity: 0.9,
       weight: 2
     }).addTo(jobsMap);
@@ -207,17 +213,21 @@ function renderRoute() {
   L.marker([DEPOT.lat, DEPOT.lng]).addTo(routeMap).bindPopup("Start");
   const latlngs = [[DEPOT.lat, DEPOT.lng]];
   ordered.forEach((j, i) => {
-    L.circleMarker([j.lat, j.lng], { radius: 9, color: "#111", fillColor: "#FFC400", fillOpacity: 1, weight: 2 })
+    L.circleMarker([j.lat, j.lng], { radius: 9, color: "#1e293b", fillColor: "#059669", fillOpacity: 1, weight: 2 })
       .addTo(routeMap)
       .bindTooltip(String(i + 1), { permanent: true, direction: "center", className: "route-num-tip" });
     latlngs.push([j.lat, j.lng]);
   });
-  L.polyline(latlngs, { color: "#FF6B00", weight: 3, dashArray: "6 6" }).addTo(routeMap);
+  L.polyline(latlngs, { color: "#059669", weight: 3, dashArray: "6 6" }).addTo(routeMap);
   routeMap.fitBounds(latlngs, { padding: [24, 24] });
 }
 
 /* ---------- list scrap form ---------- */
 let selectedWeight = "";
+const PHOTO_PLACEHOLDER = `
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h1.2l.9-1.5A2 2 0 0 1 9.8 3.5h4.4a2 2 0 0 1 1.7 1l.9 1.5H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+  <span>Tap to add a photo</span>
+`;
 
 document.getElementById("photoPreview").addEventListener("click", () => {
   document.getElementById("photoInput").click();
@@ -229,7 +239,7 @@ document.getElementById("photoInput").addEventListener("change", e => {
   reader.onload = () => {
     const preview = document.getElementById("photoPreview");
     preview.style.backgroundImage = `url(${reader.result})`;
-    preview.textContent = "";
+    preview.innerHTML = "";
   };
   reader.readAsDataURL(file);
 });
@@ -275,15 +285,14 @@ document.getElementById("listForm").addEventListener("submit", async e => {
     lat: coords.lat,
     lng: coords.lng,
     address: postcodeInput.value.toUpperCase(),
-    urgency: document.getElementById("urgency").value,
-    icon: "\u{2699}️"
+    urgency: document.getElementById("urgency").value
   };
   listings.push(newListing);
   localStorage.setItem("scrapman_listings", JSON.stringify(listings));
 
   e.target.reset();
   document.getElementById("photoPreview").style.backgroundImage = "";
-  document.getElementById("photoPreview").textContent = "Tap to add a photo";
+  document.getElementById("photoPreview").innerHTML = PHOTO_PLACEHOLDER;
   document.querySelectorAll("#weightGroup .pill").forEach(p => p.classList.remove("active"));
   selectedWeight = "";
   goTo("confirm");

@@ -1,4 +1,4 @@
-const CACHE = "scrapman-v1";
+const CACHE = "scrapman-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,7 +7,8 @@ const ASSETS = [
   "./manifest.json",
   "./icon.svg",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
-  "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
+  "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
 ];
 
 self.addEventListener("install", e => {

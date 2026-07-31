@@ -22,10 +22,13 @@
 <meta name="twitter:description" content="List scrap metal in seconds. Scrap men plan smarter routes and stop driving around aimlessly.">
 <meta name="twitter:image" content="https://zo0pz.github.io/ScrapMan/og-image.png">
 
-<meta name="theme-color" content="#111111">
+<meta name="theme-color" content="#1e293b">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
@@ -38,7 +41,13 @@
       <img src="icon.svg" alt="" class="brand-mark">
       <span class="brand-name">Scrap<span class="accent">Man</span></span>
     </div>
-    <button class="icon-btn" id="accountBtn" aria-label="Account">&#9881;</button>
+    <button class="icon-btn" id="accountBtn" aria-label="Account">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
+        <line x1="4" y1="6" x2="20" y2="6"/><circle cx="15" cy="6" r="1.8" fill="currentColor" stroke="none"/>
+        <line x1="4" y1="12" x2="20" y2="12"/><circle cx="9" cy="12" r="1.8" fill="currentColor" stroke="none"/>
+        <line x1="4" y1="18" x2="20" y2="18"/><circle cx="17" cy="18" r="1.8" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
   </header>
 
   <main class="screens">
@@ -58,17 +67,23 @@
 
       <div class="value-props">
         <div class="value-card">
-          <span class="vc-icon">&#128506;&#65039;</span>
+          <span class="vc-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+          </span>
           <h3>Plan your route</h3>
           <p>Jobs ordered by distance automatically, not the order they came in.</p>
         </div>
         <div class="value-card">
-          <span class="vc-icon">&#128176;</span>
+          <span class="vc-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9v.01M18 15v.01"/></svg>
+          </span>
           <h3>Free to list</h3>
           <p>Households never pay a penny. Collectors pay per job, no contracts.</p>
         </div>
         <div class="value-card">
-          <span class="vc-icon">&#9989;</span>
+          <span class="vc-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v6c0 4.4 3.2 7.6 7.5 9 4.3-1.4 7.5-4.6 7.5-9V6L12 3Z"/><path d="m9 12 2 2 4-4"/></svg>
+          </span>
           <h3>Verified collectors</h3>
           <p>Badge-checked scrap men, ratings on every job.</p>
         </div>
@@ -86,7 +101,10 @@
         <label class="field">
           <span>Photo</span>
           <input type="file" accept="image/*" id="photoInput">
-          <div class="photo-preview" id="photoPreview">Tap to add a photo</div>
+          <div class="photo-preview" id="photoPreview">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h1.2l.9-1.5A2 2 0 0 1 9.8 3.5h4.4a2 2 0 0 1 1.7 1l.9 1.5H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            <span>Tap to add a photo</span>
+          </div>
         </label>
 
         <label class="field">
@@ -135,7 +153,9 @@
     <!-- LIST CONFIRMATION -->
     <section class="screen" id="screen-confirm">
       <div class="confirm-box">
-        <span class="confirm-icon">&#9989;</span>
+        <span class="confirm-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.25"/><path d="m8 12.5 2.5 2.5L16 9.5"/></svg>
+        </span>
         <h2>You're on the map</h2>
         <p>Your listing is live. Nearby collectors will see it on their route planner &mdash; you'll get a message when someone's on the way.</p>
         <button class="cta cta-dark full-width" data-nav="home">Back to home</button>
@@ -159,7 +179,9 @@
     <section class="screen" id="screen-route">
       <h2 class="screen-title">Today's route</h2>
       <div id="routeEmpty" class="empty-state">
-        <span class="vc-icon">&#128506;&#65039;</span>
+        <span class="vc-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+        </span>
         <p>Add jobs from <strong>Jobs near you</strong> to build your route.</p>
         <button class="cta cta-dark" data-nav="jobs">Find jobs</button>
       </div>
@@ -215,11 +237,26 @@
   </main>
 
   <nav class="tab-bar">
-    <button class="tab active" data-nav="home"><span>&#127968;</span>Home</button>
-    <button class="tab" data-nav="list"><span>&#128247;</span>List</button>
-    <button class="tab" data-nav="jobs"><span>&#128230;</span>Jobs</button>
-    <button class="tab" data-nav="route"><span>&#128506;&#65039;</span>Route</button>
-    <button class="tab" data-nav="pricing"><span>&#128176;</span>Pricing</button>
+    <button class="tab active" data-nav="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-5h4v5h3a1 1 0 0 0 1-1v-9"/></svg>
+      Home
+    </button>
+    <button class="tab" data-nav="list">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h1.2l.9-1.5A2 2 0 0 1 9.8 3.5h4.4a2 2 0 0 1 1.7 1l.9 1.5H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      List
+    </button>
+    <button class="tab" data-nav="jobs">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5v-9Z"/><path d="M3.5 7.5 12 12l8.5-4.5"/><path d="M12 12v9"/></svg>
+      Jobs
+    </button>
+    <button class="tab" data-nav="route">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+      Route
+    </button>
+    <button class="tab" data-nav="pricing">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9v.01M18 15v.01"/></svg>
+      Pricing
+    </button>
   </nav>
 
 </div>
