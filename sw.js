@@ -1,4 +1,4 @@
-const CACHE = "scrapman-v2";
+const CACHE = "scrapman-v3";
 const ASSETS = [
   "./",
   "./index.html",

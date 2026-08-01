@@ -1,7 +1,7 @@
 {
   "name": "ScrapMan",
   "short_name": "ScrapMan",
-  "description": "List scrap metal in seconds. Scrap men plan smarter routes.",
+  "description": "Free doorstep scrap metal collection for households — and smarter routes for collectors.",
   "start_url": "index.html",
   "display": "standalone",
   "background_color": "#f8fafc",
