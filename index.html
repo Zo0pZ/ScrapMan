@@ -41,13 +41,18 @@
       <img src="icon.svg" alt="" class="brand-mark">
       <span class="brand-name">Scrap<span class="accent">Man</span></span>
     </div>
-    <button class="icon-btn" id="accountBtn" aria-label="Account">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
-        <line x1="4" y1="6" x2="20" y2="6"/><circle cx="15" cy="6" r="1.8" fill="currentColor" stroke="none"/>
-        <line x1="4" y1="12" x2="20" y2="12"/><circle cx="9" cy="12" r="1.8" fill="currentColor" stroke="none"/>
-        <line x1="4" y1="18" x2="20" y2="18"/><circle cx="17" cy="18" r="1.8" fill="currentColor" stroke="none"/>
-      </svg>
-    </button>
+    <div class="header-actions">
+      <button class="icon-btn" data-nav="messages" aria-label="Messages">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 6h16v11a1 1 0 0 1-1 1H8l-4 3V6Z"/><path d="M8 10h8M8 13.5h5"/>
+        </svg>
+      </button>
+      <button class="icon-btn" id="accountBtn" data-nav="account" aria-label="Account">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>
+        </svg>
+      </button>
+    </div>
   </header>
 
   <main class="screens">
@@ -58,6 +63,13 @@
         <p class="eyebrow">Doo-be-doo &middot; he'll haul your scrap away</p>
         <h1>Scrap gone from your doorstep. No lifting, no tip runs.</h1>
         <p class="hero-sub">Snap a photo, drop your postcode, and a vetted local collector comes to you &mdash; no hanging around, no hauling it anywhere. Free for households, always.</p>
+      </div>
+
+      <div class="install-banner hidden" id="installBanner">
+        <img src="icon.svg" alt="" class="install-icon">
+        <p>Add ScrapMan to your home screen for one-tap listing.</p>
+        <button class="add-btn" id="installBtn">Install</button>
+        <button class="install-x" id="installDismiss" aria-label="Dismiss">&times;</button>
       </div>
 
       <div class="cta-row">
@@ -99,6 +111,7 @@
       </div>
 
       <button class="link-btn" data-nav="pricing">See pricing &rarr;</button>
+      <a class="link-btn council-link" href="council-bulky-waste-charges.html">Compare your council's bulky waste charges &rarr;</a>
     </section>
 
     <!-- LIST SCRAP (public) -->
@@ -147,6 +160,17 @@
         </label>
 
         <label class="field">
+          <span>Your name</span>
+          <input type="text" id="contactName" placeholder="e.g. Sam" autocomplete="name" required>
+        </label>
+
+        <label class="field">
+          <span>Mobile number</span>
+          <input type="tel" id="contactPhone" placeholder="e.g. 07700 900123" autocomplete="tel" required>
+          <small class="field-hint">Only shown to a verified collector who takes your job.</small>
+        </label>
+
+        <label class="field">
           <span>How soon?</span>
           <select id="urgency">
             <option value="today">Today if possible</option>
@@ -168,6 +192,7 @@
         <h2>You're on the map</h2>
         <p>Your listing is live and nearby collectors can see it straight away. You'll get a message when someone's on the way &mdash; no need to move anything until then.</p>
         <button class="cta cta-dark full-width" data-nav="home">Back to home</button>
+        <button class="link-btn" data-nav="messages">Open messages &rarr;</button>
       </div>
     </section>
 
@@ -221,8 +246,8 @@
         <h3>Pay-per-job <span class="price-tag">&pound;1.50</span></h3>
         <p class="price-who">For collectors &mdash; no contract</p>
         <ul>
-          <li>Pay only when you accept a job</li>
-          <li>Full job feed access</li>
+          <li>Browse jobs &amp; rough locations free</li>
+          <li>&pound;1.50 to unlock a homeowner's contact details</li>
           <li>Basic distance sorting</li>
         </ul>
       </div>
@@ -232,16 +257,107 @@
         <h3>ScrapMan Pro <span class="price-tag">&pound;6.99<small>/mo</small></span></h3>
         <p class="price-who">For collectors doing this daily</p>
         <ul>
-          <li>Unlimited leads, no per-job fee</li>
+          <li>Unlimited contact unlocks, no per-job fee</li>
           <li>Route planner &amp; time-saved tracking</li>
           <li>Priority on new listings near you</li>
         </ul>
+        <button class="cta cta-primary full-width" id="goProBtn">Go Pro (demo)</button>
       </div>
 
       <div class="extras">
         <div class="extra-row"><span>Verified badge</span><strong>&pound;4.99 one-off</strong></div>
         <div class="extra-row"><span>Boost my listing (faster pickup)</span><strong>&pound;1.99</strong></div>
       </div>
+    </section>
+
+    <!-- GET VERIFIED (collector) -->
+    <section class="screen" id="screen-verify">
+      <h2 class="screen-title">Get verified</h2>
+      <p class="screen-sub">Homeowners only share their details with licensed, badge-checked collectors.</p>
+      <p class="demo-note">Demo &mdash; in a live service we'd check these against the <a href="https://environment.data.gov.uk/public-register/view/search-waste-carriers-brokers" target="_blank" rel="noopener">Environment Agency public register</a> and your council's scrap metal licence register. Here, submitting instantly marks you verified.</p>
+
+      <form id="verifyForm" class="stack-form">
+        <label class="field">
+          <span>Business name</span>
+          <input type="text" id="bizName" placeholder="e.g. Dave's Metals" required>
+        </label>
+        <label class="field">
+          <span>Waste carrier registration number</span>
+          <input type="text" id="carrierRef" placeholder="e.g. CBDU123456" required>
+          <small class="field-hint">Every collector needs one &mdash; it's free to check on the Environment Agency register.</small>
+        </label>
+        <label class="field">
+          <span>Scrap metal collector's licence &mdash; issuing council</span>
+          <input type="text" id="smdCouncil" placeholder="e.g. Birmingham City Council" required>
+          <small class="field-hint">Collector's licences (Scrap Metal Dealers Act 2013) are issued per council area.</small>
+        </label>
+        <label class="field">
+          <span>Licence number</span>
+          <input type="text" id="smdLicence" placeholder="e.g. SM/2026/0123" required>
+        </label>
+        <label class="field">
+          <span>Public liability insurance?</span>
+          <div class="pill-group" id="insuranceGroup">
+            <button type="button" class="pill" data-ins="yes">Yes</button>
+            <button type="button" class="pill" data-ins="no">Not yet</button>
+          </div>
+        </label>
+        <button type="submit" class="cta cta-primary full-width">Submit for verification (demo)</button>
+      </form>
+    </section>
+
+    <!-- ACCOUNT -->
+    <section class="screen" id="screen-account">
+      <h2 class="screen-title">Account</h2>
+      <p class="screen-sub">Your profile, plan and app settings.</p>
+
+      <div class="account-card" id="accVerify"></div>
+      <div class="account-card" id="accPro"></div>
+
+      <div class="account-card hidden" id="accInstall">
+        <div class="toggle-row">
+          <div><strong>Install ScrapMan</strong><span>Quick access from your home screen</span></div>
+          <button class="add-btn" id="accInstallBtn">Install</button>
+        </div>
+      </div>
+
+      <div class="account-card">
+        <div class="toggle-row">
+          <div><strong>Council charge checker</strong><span>What does bulky waste cost near you?</span></div>
+          <a class="add-btn" href="council-bulky-waste-charges.html">Compare</a>
+        </div>
+      </div>
+
+      <button class="cta cta-danger full-width" id="resetDemoBtn">Reset demo data</button>
+    </section>
+
+    <!-- MESSAGES -->
+    <section class="screen" id="screen-messages">
+      <h2 class="screen-title">Messages</h2>
+      <p class="screen-sub">Chats open once a collector unlocks a listing.</p>
+      <div id="messagesEmpty" class="empty-state hidden">
+        <span class="vc-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v11a1 1 0 0 1-1 1H8l-4 3V6Z"/><path d="M8 10h8M8 13.5h5"/></svg>
+        </span>
+        <p>No conversations yet. Collectors: unlock a job to message the homeowner. Homeowners: you'll hear from a collector here once someone takes your listing.</p>
+      </div>
+      <div id="threadList" class="thread-list"></div>
+    </section>
+
+    <!-- THREAD -->
+    <section class="screen" id="screen-thread">
+      <div class="thread-header">
+        <button class="icon-btn dark" data-nav="messages" aria-label="Back to messages">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <h2 class="screen-title" id="threadTitle">Conversation</h2>
+      </div>
+      <p class="demo-note">Demo &mdash; replies are simulated.</p>
+      <div class="msg-list" id="msgList"></div>
+      <form class="msg-input-row" id="msgForm">
+        <input type="text" id="msgInput" placeholder="Write a message&hellip;" autocomplete="off">
+        <button type="submit" class="cta cta-primary">Send</button>
+      </form>
     </section>
 
   </main>
@@ -268,6 +384,66 @@
       Pricing
     </button>
   </nav>
+
+  <!-- OVERLAYS -->
+  <div class="overlay" id="overlay-pay">
+    <div class="sheet">
+      <span class="sheet-handle" aria-hidden="true"></span>
+      <h3>Unlock contact details</h3>
+      <p class="sheet-sub">One-off &pound;1.50 &mdash; you get the homeowner's name, number and full address, plus in-app chat.</p>
+      <p class="demo-note">Demo &mdash; no real payment is taken. The card below is a test number.</p>
+      <div class="fake-card">
+        <div class="field"><span>Card number</span><input type="text" value="4242 4242 4242 4242" readonly></div>
+        <div class="fake-card-row">
+          <div class="field"><span>Expiry</span><input type="text" value="12/28" readonly></div>
+          <div class="field"><span>CVC</span><input type="text" value="123" readonly></div>
+        </div>
+      </div>
+      <button class="cta cta-primary full-width" id="payBtn">Pay &pound;1.50</button>
+      <button class="link-btn sheet-close">Cancel</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay-pro">
+    <div class="sheet">
+      <span class="sheet-handle" aria-hidden="true"></span>
+      <h3>ScrapMan Pro</h3>
+      <p class="sheet-sub">&pound;6.99/mo &mdash; unlimited contact unlocks, route planner and priority on new listings. Cancel any time on the Account screen.</p>
+      <p class="demo-note">Demo &mdash; no real payment is taken.</p>
+      <div class="fake-card">
+        <div class="field"><span>Card number</span><input type="text" value="4242 4242 4242 4242" readonly></div>
+        <div class="fake-card-row">
+          <div class="field"><span>Expiry</span><input type="text" value="12/28" readonly></div>
+          <div class="field"><span>CVC</span><input type="text" value="123" readonly></div>
+        </div>
+      </div>
+      <button class="cta cta-primary full-width" id="proBtn">Subscribe &mdash; &pound;6.99/mo</button>
+      <button class="link-btn sheet-close">Cancel</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay-verifyPrompt">
+    <div class="sheet">
+      <span class="sheet-handle" aria-hidden="true"></span>
+      <h3>Verify your licences first</h3>
+      <p class="sheet-sub">Homeowners only share their contact details with licensed collectors &mdash; it's what makes them comfortable listing. Takes two minutes.</p>
+      <button class="cta cta-primary full-width" id="verifyPromptBtn">Get verified</button>
+      <button class="link-btn sheet-close">Not now</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay-ios">
+    <div class="sheet">
+      <span class="sheet-handle" aria-hidden="true"></span>
+      <h3>Install on iPhone or iPad</h3>
+      <ol class="how-steps ios-steps">
+        <li><span class="stop-num">1</span> Tap the <strong>Share</strong> button in Safari</li>
+        <li><span class="stop-num">2</span> Scroll down and tap <strong>Add to Home Screen</strong></li>
+        <li><span class="stop-num">3</span> Tap <strong>Add</strong> &mdash; ScrapMan appears like an app</li>
+      </ol>
+      <button class="cta cta-dark full-width sheet-close">Done</button>
+    </div>
+  </div>
 
 </div>
 
