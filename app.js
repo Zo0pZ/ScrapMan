@@ -136,6 +136,11 @@ document.getElementById("authForm").addEventListener("submit", async e => {
     statusEl.textContent = result.error.message || "Something went wrong — please try again.";
     statusEl.className = "demo-note status-error";
     statusEl.classList.remove("hidden");
+    if (result.error.code === "already_registered") {
+      authMode = "signin";
+      applyAuthMode();
+      document.getElementById("authEmail").value = email;
+    }
     return;
   }
   if (authMode === "signup" && result.data && !result.data.session) {

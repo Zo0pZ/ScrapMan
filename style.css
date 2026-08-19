@@ -135,7 +135,7 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
   z-index: 10;
 }
 .brand { display: flex; align-items: center; gap: 8px; }
-.brand-mark { width: 26px; height: 26px; }
+.brand-mark { width: 48px; height: 48px; }
 .brand-name { font-weight: 800; font-size: 1.15rem; letter-spacing: -0.02em; }
 .brand-name .accent { color: var(--color-accent); }
 .icon-btn {
@@ -519,7 +519,7 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
 }
 .install-banner.hidden { display: none; }
 .install-banner p { margin: 0; font-size: 0.82rem; font-weight: 600; flex: 1; color: #e2e8f0; }
-.install-icon { width: 30px; height: 30px; border-radius: 8px; }
+.install-icon { width: 36px; height: 36px; border-radius: 8px; }
 .install-banner .add-btn { border-color: var(--color-accent); color: var(--color-accent); background: transparent; }
 .install-x {
   background: none; border: none; color: #8a96a0; font-size: 1.3rem;
@@ -690,7 +690,7 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
 body.page { background: var(--color-background); padding: 0; }
 .page-wrap { max-width: 680px; margin: 0 auto; padding: 24px 20px 60px; }
 .page-header { display: flex; align-items: center; gap: 10px; padding: 4px 0 20px; }
-.page-header img { width: 30px; height: 30px; }
+.page-header img { width: 48px; height: 48px; }
 .page-header a { text-decoration: none; color: var(--color-foreground); }
 .page-wrap h1 { font-size: clamp(1.7rem, 5vw, 2.3rem); letter-spacing: -0.03em; line-height: 1.12; margin: 0 0 14px; }
 .page-wrap h2 { font-size: 1.15rem; margin: 28px 0 10px; letter-spacing: -0.01em; }

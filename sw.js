@@ -1,4 +1,4 @@
-const CACHE = "scrapman-v15";
+const CACHE = "scrapman-v17";
 const ASSETS = [
   "./",
   "./index.html",
@@ -9,6 +9,7 @@ const ASSETS = [
   "./app.js",
   "./manifest.json",
   "./scrapman-logo-icon-only.svg",
+  "./scrapman-logo-icon-only-mark.svg",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2",
@@ -41,8 +42,10 @@ self.addEventListener("fetch", e => {
   // fallback. Cache-first was tried here originally and repeatedly served stale JS
   // after edits during development — network-first with a cache fallback is the safer
   // default for files that change often, vs. content-hashed assets that never do.
+  // "reload" forces this fetch past the browser's own HTTP cache — without it, network-first
+  // can still be silently satisfied by a stale cached response, defeating the point.
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: "reload" })
       .then(res => {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, copy));

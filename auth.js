@@ -51,6 +51,14 @@ async function scrapmanSignUp({ email, password, role, displayName }) {
     options: { data: { role, display_name: displayName } }
   });
   if (error) return { error };
+  // Supabase deliberately does NOT error when the email already belongs to a confirmed
+  // account — it returns a success-shaped response with no session and sends no email,
+  // so silent enumeration isn't possible. An empty identities array is the documented
+  // signal for that case; without checking it, an existing user re-"signing up" would be
+  // told to check their email for a confirmation that's never sent.
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    return { error: { code: "already_registered", message: "You've already got an account with that email — sign in instead." } };
+  }
   // A fresh sign-up may require email confirmation depending on your project's auth
   // settings — if so, data.session will be null here even though data.user exists.
   if (data.session) await scrapmanRefreshSession();

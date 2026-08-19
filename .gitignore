@@ -1,6 +1,7 @@
 # Local dev tooling — not part of the deployed site
 .mcp.json
 design-system/
+.playwright-mcp/
 
 # OS / editor cruft
 .DS_Store
