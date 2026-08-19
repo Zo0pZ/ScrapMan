@@ -1,27 +1,9 @@
-/* ScrapMan prototype — mock data + local logic only, no backend */
+/* ScrapMan — homeowner/collector scrap collection marketplace. Backed by Supabase (see supabase-config.js). */
+/* Location helpers (geolocation, reverse geocoding, council lookup) live in geo.js */
 
-const DEPOT = { lat: 52.4862, lng: -1.8904, label: "Your start point (Birmingham)" };
-
-/* Contact details are inert fakes: names invented, phones from the
-   Ofcom drama range (07700 900xxx), addresses fictional. */
-const MOCK_JOBS = [
-  { id: 1, title: "Old washing machine", type: "appliance", weight: "medium", lat: 52.4780, lng: -1.9025, address: "Edgbaston, B15", urgency: "today",
-    contactName: "Sandra P.", contactPhone: "07700 900123", fullAddress: "42 Willow Rd, Edgbaston B15 2TT" },
-  { id: 2, title: "Copper pipe offcuts", type: "nonferrous", weight: "small", lat: 52.4915, lng: -1.9200, address: "Ladywood, B16", urgency: "week",
-    contactName: "Dev K.", contactPhone: "07700 900234", fullAddress: "8 Monument Ct, Ladywood B16 8UZ" },
-  { id: 3, title: "Steel garden gate + railings", type: "ferrous", weight: "medium", lat: 52.4700, lng: -1.8800, address: "Moseley, B13", urgency: "norush",
-    contactName: "Margaret H.", contactPhone: "07700 900345", fullAddress: "117 Oakfield Ave, Moseley B13 9DJ" },
-  { id: 4, title: "Dead car battery x4", type: "nonferrous", weight: "small", lat: 52.5010, lng: -1.8700, address: "Aston, B6", urgency: "today",
-    contactName: "Tommy R.", contactPhone: "07700 900456", fullAddress: "3 Victoria Works, Aston B6 5RQ" },
-  { id: 5, title: "Fridge freezer, cooker, dishwasher", type: "appliance", weight: "large", lat: 52.4550, lng: -1.9300, address: "Selly Oak, B29", urgency: "week",
-    contactName: "Priya S.", contactPhone: "07700 900567", fullAddress: "29 Harborne Ln, Selly Oak B29 6SN" },
-  { id: 6, title: "Scaffold poles, mixed lengths", type: "ferrous", weight: "large", lat: 52.4990, lng: -1.9100, address: "Hockley, B18", urgency: "norush",
-    contactName: "Big Dave", contactPhone: "07700 900678", fullAddress: "Unit 4, Pitsford St, Hockley B18 6LJ" },
-  { id: 7, title: "Brass fittings, old radiators", type: "nonferrous", weight: "medium", lat: 52.4650, lng: -1.8600, address: "Sparkbrook, B11", urgency: "today",
-    contactName: "Aisha B.", contactPhone: "07700 900789", fullAddress: "64 Ladypool Rd, Sparkbrook B11 4JE" },
-  { id: 8, title: "Skip-load mixed metal, house clearance", type: "ferrous", weight: "large", lat: 52.5100, lng: -1.9350, address: "Handsworth, B21", urgency: "week",
-    contactName: "Colin W.", contactPhone: "07700 900890", fullAddress: "12 Grove Ln, Handsworth B21 9ES" }
-];
+let DEPOT = { lat: 52.4862, lng: -1.8904, label: "Birmingham" };
+let usingDefaultLocation = true;
+let locationAttempted = false;
 
 const WEIGHT_LABEL = { small: "Car boot", medium: "Trailer load", large: "Skip load" };
 const URGENCY_LABEL = { today: "Today", week: "This week", norush: "No rush" };
@@ -53,41 +35,47 @@ let currentThread = null;
 let pendingUnlockId = null;
 let deferredInstallPrompt = null;
 
-function unlockedIds() { return loadJSON("scrapman_unlocked", []); }
-function isUnlocked(id) { return unlockedIds().includes(id); }
-function unlockJob(id) {
-  const ids = unlockedIds();
-  if (!ids.includes(id)) { ids.push(id); saveJSON("scrapman_unlocked", ids); }
+async function fetchUnlockedIds() {
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return [];
+  const { data } = await scrapmanDb.from("job_unlocks").select("listing_id").eq("collector_id", scrapmanSession.user.id);
+  return (data || []).map(r => r.listing_id);
+}
+
+async function unlockJob(id) {
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return;
+  await scrapmanDb.from("job_unlocks").upsert({ listing_id: id, collector_id: scrapmanSession.user.id });
 }
 function isPro() { return !!loadJSON("scrapman_pro", null)?.active; }
 function setPro(active) {
   if (active) saveJSON("scrapman_pro", { active: true, since: Date.now() });
   else localStorage.removeItem("scrapman_pro");
 }
-function getCollector() { return loadJSON("scrapman_collector", null); }
+function getCollector() {
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return null;
+  const cp = scrapmanSession.collectorProfile;
+  return cp ? {
+    businessName: cp.business_name, carrierRef: cp.carrier_ref, smdCouncil: cp.smd_council,
+    smdLicence: cp.smd_licence, status: cp.verification_status,
+    eaCarrier: cp.ea_carrier, eaScrapMetalLicence: cp.ea_scrap_metal_licence
+  } : null;
+}
 function isVerified() { return getCollector()?.status === "verified"; }
-function getMessages() { return loadJSON("scrapman_messages", {}); }
-function getThread(id) { return getMessages()[id] || []; }
-function sendMessage(id, from, text) {
-  const all = getMessages();
-  (all[id] = all[id] || []).push({ from, text, ts: Date.now() });
-  saveJSON("scrapman_messages", all);
-}
-function myListingIds() { return loadJSON("scrapman_listings", []).map(l => l.id); }
-function resetDemo() {
-  Object.keys(localStorage)
-    .filter(k => k.startsWith("scrapman_"))
-    .forEach(k => localStorage.removeItem(k));
-  location.reload();
-}
 
 /* ---------- navigation ---------- */
 function goTo(screen) {
+  // Signed-out + configured: everything except the auth screen redirects to sign-up/sign-in.
+  if (SCRAPMAN_AUTH_CONFIGURED && !scrapmanSession && screen !== "auth") {
+    screen = "auth";
+  }
+  if (screen !== "thread") unsubscribeFromThreadMessages();
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   document.getElementById("screen-" + screen).classList.add("active");
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.nav === screen));
-  if (screen === "jobs") setTimeout(initJobsMap, 0);
-  if (screen === "route") setTimeout(renderRoute, 0);
+  if (screen === "jobs") { updateLocationUI(); setTimeout(initJobsMap, 0); ensureLocation().then(initJobsMap); renderActiveAssignment(); }
+  if (screen === "route") { updateLocationUI(); setTimeout(renderRoute, 0); ensureLocation().then(renderRoute); }
+  if (screen === "track") renderTrack();
+  if (screen === "home") personalizeCouncilLink();
+  if (screen === "list") prefillPostcodeFromLocation();
   if (screen === "messages") renderMessages();
   if (screen === "thread") renderThread();
   if (screen === "account") renderAccount();
@@ -95,6 +83,82 @@ function goTo(screen) {
 
 document.querySelectorAll("[data-nav]").forEach(el => {
   el.addEventListener("click", () => goTo(el.dataset.nav));
+});
+
+/* ---------- auth (accounts, gated entirely by SCRAPMAN_AUTH_CONFIGURED) ---------- */
+let authMode = "signup";
+let authRoleChoice = "homeowner";
+
+function applyAuthMode() {
+  const isSignup = authMode === "signup";
+  document.getElementById("authTitle").textContent = isSignup ? "Join ScrapMan" : "Welcome back";
+  document.getElementById("authSub").textContent = isSignup
+    ? "Choose how you'll use ScrapMan — homeowners and collectors get different apps from here on."
+    : "Sign in to pick up where you left off.";
+  document.getElementById("authRoleGroup").classList.toggle("hidden", !isSignup);
+  document.getElementById("authNameField").classList.toggle("hidden", !isSignup);
+  document.getElementById("authSubmitBtn").textContent = isSignup ? "Create account" : "Sign in";
+  document.getElementById("authToggleMode").textContent = isSignup ? "Already have an account? Sign in" : "New here? Create an account";
+}
+applyAuthMode();
+
+document.getElementById("authToggleMode").addEventListener("click", () => {
+  authMode = authMode === "signup" ? "signin" : "signup";
+  applyAuthMode();
+});
+
+document.getElementById("authRoleGroup").addEventListener("click", e => {
+  const pill = e.target.closest(".pill");
+  if (!pill) return;
+  document.querySelectorAll("#authRoleGroup .pill").forEach(p => p.classList.remove("active"));
+  pill.classList.add("active");
+  authRoleChoice = pill.dataset.roleChoice;
+});
+
+document.getElementById("authForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = document.getElementById("authSubmitBtn");
+  const statusEl = document.getElementById("authStatus");
+  statusEl.classList.add("hidden");
+  btn.disabled = true;
+  btn.textContent = authMode === "signup" ? "Creating account…" : "Signing in…";
+
+  const email = document.getElementById("authEmail").value;
+  const password = document.getElementById("authPassword").value;
+  const result = authMode === "signup"
+    ? await scrapmanSignUp({ email, password, role: authRoleChoice, displayName: document.getElementById("authDisplayName").value || email.split("@")[0] })
+    : await scrapmanSignIn({ email, password });
+
+  btn.disabled = false;
+  applyAuthMode();
+
+  if (result.error) {
+    statusEl.textContent = result.error.message || "Something went wrong — please try again.";
+    statusEl.className = "demo-note status-error";
+    statusEl.classList.remove("hidden");
+    return;
+  }
+  if (authMode === "signup" && result.data && !result.data.session) {
+    statusEl.textContent = "Check your email to confirm your account, then sign in.";
+    statusEl.className = "demo-note status-ok";
+    statusEl.classList.remove("hidden");
+    authMode = "signin";
+    applyAuthMode();
+    return;
+  }
+  goTo("home");
+});
+
+document.getElementById("signOutBtn").addEventListener("click", async () => {
+  await scrapmanSignOut();
+  goTo("auth");
+});
+
+window.addEventListener("scrapman:auth", () => {
+  scrapmanApplyRoleUI();
+  const onAuthScreen = document.getElementById("screen-auth").classList.contains("active");
+  if (scrapmanSession && onAuthScreen) goTo("home");
+  if (SCRAPMAN_AUTH_CONFIGURED && !scrapmanSession && !onAuthScreen) goTo("auth");
 });
 
 /* ---------- bottom sheets ---------- */
@@ -112,42 +176,238 @@ document.querySelectorAll(".sheet-close").forEach(btn => {
   btn.addEventListener("click", closeSheet);
 });
 
-/* ---------- distance ---------- */
-function haversine(a, b) {
-  const R = 6371;
-  const dLat = (b.lat - a.lat) * Math.PI / 180;
-  const dLng = (b.lng - a.lng) * Math.PI / 180;
-  const s = Math.sin(dLat / 2) ** 2 +
-    Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+/* ---------- distance & geocoding ---------- */
+/* haversine / geocodePostcode are provided by geo.js (scrapmanHaversine / scrapmanGeocodePostcode) */
+const haversine = scrapmanHaversine;
+const geocodePostcode = scrapmanGeocodePostcode;
+
+/* ---------- user location (collector's own position, or a homeowner's council lookup) ---------- */
+function locationLabel() {
+  return usingDefaultLocation ? `${DEPOT.label} (default — set yours)` : DEPOT.label;
 }
 
-/* ---------- geocoding (postcodes.io, free, no key) ---------- */
-async function geocodePostcode(postcode) {
-  const clean = postcode.trim().replace(/\s+/g, "");
-  if (!clean) return null;
-  try {
-    const res = await fetch(
-      `https://api.postcodes.io/postcodes/${encodeURIComponent(clean)}`
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data.status !== 200 || !data.result) return null;
-    return { lat: data.result.latitude, lng: data.result.longitude };
-  } catch {
-    return null;
+function applyLocation(loc) {
+  DEPOT = { lat: loc.lat, lng: loc.lng, label: loc.label, postcode: loc.postcode, council: loc.council };
+  usingDefaultLocation = false;
+}
+
+function updateLocationUI() {
+  document.querySelectorAll(".location-label").forEach(el => { el.textContent = locationLabel(); });
+  document.querySelectorAll(".location-row").forEach(el => el.classList.toggle("is-default", usingDefaultLocation));
+}
+
+/* Called when a collector opens Jobs/Route — resolves a real starting point once per
+   session (from cache, or a silent check if permission was already granted), then
+   leaves it to the "Change" control after that so we never nag with repeat prompts. */
+async function ensureLocation() {
+  if (locationAttempted) { updateLocationUI(); return; }
+  locationAttempted = true;
+  const loc = (await scrapmanAutoLocate()) || (await scrapmanRequestGeolocation());
+  if (loc) applyLocation(loc);
+  updateLocationUI();
+}
+
+async function setLocationFromGPS() {
+  const btn = document.getElementById("useGpsBtn");
+  btn.disabled = true;
+  btn.textContent = "Finding you…";
+  const loc = await scrapmanRequestGeolocation();
+  btn.disabled = false;
+  btn.textContent = "Use my current location";
+  if (!loc) { alert("Couldn't get your location — check location permissions, or enter a postcode below."); return; }
+  applyLocation(loc);
+  updateLocationUI();
+  closeSheet();
+  refreshLocationDependentScreens();
+}
+
+document.getElementById("useGpsBtn").addEventListener("click", setLocationFromGPS);
+
+document.getElementById("setLocationBtn").addEventListener("click", async () => {
+  const input = document.getElementById("locationPostcode");
+  const btn = document.getElementById("setLocationBtn");
+  btn.disabled = true;
+  btn.textContent = "Finding…";
+  const loc = await scrapmanGeocodePostcode(input.value);
+  btn.disabled = false;
+  btn.textContent = "Set location";
+  if (!loc) { input.setCustomValidity("We couldn't find that postcode."); input.reportValidity(); return; }
+  input.setCustomValidity("");
+  applyLocation(loc);
+  updateLocationUI();
+  input.value = "";
+  closeSheet();
+  refreshLocationDependentScreens();
+});
+
+document.querySelectorAll(".location-change").forEach(btn => {
+  btn.addEventListener("click", () => openSheet("overlay-location"));
+});
+
+function refreshLocationDependentScreens() {
+  if (document.getElementById("screen-jobs").classList.contains("active")) initJobsMap();
+  if (document.getElementById("screen-route").classList.contains("active")) renderRoute();
+}
+
+/* Home screen: point the council-charges link at the homeowner's own council when we
+   already know it (never forces a permission prompt on its own). */
+async function personalizeCouncilLink() {
+  const linkEl = document.getElementById("councilLink");
+  if (!linkEl) return;
+  const loc = scrapmanSavedLocation() || await scrapmanAutoLocate();
+  if (loc && loc.council && SCRAPMAN_COUNCILS[loc.council]) {
+    linkEl.href = SCRAPMAN_COUNCILS[loc.council];
+    linkEl.textContent = `See ${loc.council}'s bulky waste charges →`;
+    document.getElementById("locateCouncilBtn")?.classList.add("hidden");
   }
 }
 
+document.getElementById("locateCouncilBtn")?.addEventListener("click", async btnEvent => {
+  const btn = btnEvent.currentTarget;
+  btn.disabled = true;
+  const loc = await scrapmanRequestGeolocation();
+  btn.disabled = false;
+  if (!loc) { alert("Couldn't get your location — check your browser's location permissions."); return; }
+  const linkEl = document.getElementById("councilLink");
+  if (loc.council && SCRAPMAN_COUNCILS[loc.council]) {
+    linkEl.href = SCRAPMAN_COUNCILS[loc.council];
+    linkEl.textContent = `See ${loc.council}'s bulky waste charges →`;
+    btn.classList.add("hidden");
+  } else {
+    linkEl.textContent = `Compare bulky waste charges (no ${loc.council || "local"} guide yet) →`;
+  }
+});
+
 /* ---------- jobs screen ---------- */
-function getAllJobs() {
-  const extra = loadJSON("scrapman_listings", []);
-  return MOCK_JOBS.concat(extra);
+function mapListingRow(row) {
+  // listing_contacts is RLS-gated by job_unlocks — this embed comes back null for any
+  // job the signed-in collector hasn't unlocked, so no extra round trip is needed.
+  const contact = row.listing_contacts || null;
+  return {
+    id: row.id, title: row.title, type: row.metal_type, weight: row.weight_band,
+    lat: row.lat, lng: row.lng, address: row.address, urgency: row.urgency,
+    contactName: contact && contact.contact_name, contactPhone: contact && contact.contact_phone,
+    fullAddress: contact && contact.full_address
+  };
+}
+
+async function getAllJobs() {
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanDb) return [];
+  const { data, error } = await scrapmanDb
+    .from("listings")
+    .select("*, listing_contacts(contact_name, contact_phone, full_address)")
+    .eq("status", "open")
+    .order("created_at", { ascending: false });
+  if (error) { console.error(error); return []; }
+  return (data || []).map(mapListingRow);
+}
+
+/* ---------- accept & track a job (Supabase-only — no demo-mode equivalent) ---------- */
+async function acceptJob(id) {
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return;
+  const { data, error } = await scrapmanDb
+    .from("job_assignments")
+    .insert({ listing_id: id, collector_id: scrapmanSession.user.id, status: "en_route" })
+    .select().single();
+  if (error) { alert("Couldn't accept this job — it may have just been taken by someone else."); return; }
+  scrapmanStartBroadcastingLocation(data.id);
+  alert("Job accepted — the homeowner can now see you on the way. Keep this tab open while you're en route so your location keeps sharing.");
+  await Promise.all([renderJobs(), renderActiveAssignment()]);
+}
+
+async function renderActiveAssignment() {
+  const el = document.getElementById("activeAssignmentCard");
+  if (!el) return;
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession || scrapmanRole() !== "collector") {
+    el.classList.add("hidden");
+    return;
+  }
+  const { data } = await scrapmanDb
+    .from("job_assignments")
+    .select("*, listings(title)")
+    .eq("collector_id", scrapmanSession.user.id)
+    .in("status", ["accepted", "en_route", "arrived", "weighed"])
+    .limit(1);
+  const active = data && data[0];
+  if (!active) { el.classList.add("hidden"); scrapmanStopBroadcastingLocation(); return; }
+
+  el.classList.remove("hidden");
+  el.innerHTML = `
+    <div class="toggle-row">
+      <div><strong>${esc(active.listings.title)}</strong><span>Status: ${esc(active.status.replace("_", " "))} &middot; sharing your location live</span></div>
+      <div style="display:flex;gap:8px">
+        <button class="add-btn" id="messageCollectionBtn">Message</button>
+        <button class="add-btn" id="completeAssignmentBtn">Mark collected</button>
+      </div>
+    </div>`;
+  document.getElementById("messageCollectionBtn").addEventListener("click", () => openThread(active.id));
+  document.getElementById("completeAssignmentBtn").addEventListener("click", async () => {
+    await scrapmanDb.from("job_assignments").update({ status: "completed" }).eq("id", active.id);
+    scrapmanStopBroadcastingLocation();
+    renderActiveAssignment();
+  });
+  // Resumes sharing after a page reload mid-collection — harmless to call again if already running.
+  scrapmanStartBroadcastingLocation(active.id);
+}
+
+async function renderTrack() {
+  const emptyEl = document.getElementById("trackEmpty");
+  const contentEl = document.getElementById("trackContent");
+  scrapmanUnsubscribeFromLocation();
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) {
+    emptyEl.classList.remove("hidden");
+    contentEl.classList.add("hidden");
+    return;
+  }
+  const { data } = await scrapmanDb
+    .from("job_assignments")
+    .select("*, listings(*)")
+    .in("status", ["accepted", "en_route", "arrived", "weighed"])
+    .order("accepted_at", { ascending: false })
+    .limit(1);
+  const active = data && data[0];
+  if (!active) {
+    emptyEl.classList.remove("hidden");
+    contentEl.classList.add("hidden");
+    return;
+  }
+  emptyEl.classList.add("hidden");
+  contentEl.classList.remove("hidden");
+
+  const { data: collectorProfile } = await scrapmanDb.from("profiles").select("display_name").eq("id", active.collector_id).single();
+  const { data: collectorRating } = await scrapmanDb.from("collector_profiles").select("rating_avg").eq("profile_id", active.collector_id).single();
+
+  document.getElementById("trackCollectorCard").innerHTML = `
+    <div class="toggle-row">
+      <div><strong>${esc((collectorProfile && collectorProfile.display_name) || "Your collector")}</strong>
+        <span>${esc(active.listings.title)} &middot; status: ${esc(active.status.replace("_", " "))}</span></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        ${collectorRating && collectorRating.rating_avg ? `<span class="badge-verified">★ ${esc(collectorRating.rating_avg)}</span>` : ""}
+        <button class="add-btn" id="trackMessageBtn">Message</button>
+      </div>
+    </div>`;
+  document.getElementById("trackMessageBtn").addEventListener("click", () => openThread(active.id));
+
+  const mapEl = document.getElementById("trackMap");
+  let trackMap = null;
+  if (typeof L !== "undefined" && mapEl) {
+    trackMap = L.map("trackMap", { zoomControl: false, attributionControl: false }).setView([active.listings.lat, active.listings.lng], 13);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(trackMap);
+    L.marker([active.listings.lat, active.listings.lng]).addTo(trackMap).bindPopup("Collection address");
+  }
+
+  let collectorMarker = null;
+  scrapmanSubscribeToLocation(active.id, pos => {
+    if (!trackMap) return;
+    if (!collectorMarker) collectorMarker = L.marker([pos.lat, pos.lng]).addTo(trackMap).bindPopup("Your collector");
+    else collectorMarker.setLatLng([pos.lat, pos.lng]);
+    trackMap.panTo([pos.lat, pos.lng]);
+  });
 }
 
 function contactBlockHTML(j) {
   if (!j.contactName && !j.contactPhone) {
-    return `<div class="contact-block"><p class="contact-missing">Contact details weren't captured for this demo listing.</p></div>`;
+    return `<div class="contact-block"><p class="contact-missing">Contact details weren't provided for this listing.</p></div>`;
   }
   return `
     <div class="contact-block">
@@ -157,15 +417,16 @@ function contactBlockHTML(j) {
     </div>`;
 }
 
-function renderJobs() {
+async function renderJobs() {
   const list = document.getElementById("jobList");
-  const jobs = getAllJobs()
+  const [allJobs, unlockedNow] = await Promise.all([getAllJobs(), fetchUnlockedIds()]);
+  const jobs = allJobs
     .filter(j => activeFilter === "all" || j.type === activeFilter)
     .map(j => ({ ...j, dist: haversine(DEPOT, j) }))
     .sort((a, b) => a.dist - b.dist);
 
   list.innerHTML = jobs.map(j => {
-    const unlocked = isUnlocked(j.id);
+    const unlocked = unlockedNow.includes(j.id);
     return `
     <div class="job-card">
       <span class="job-icon" aria-hidden="true">${TYPE_ICON[j.type] || TYPE_ICON.mixed}</span>
@@ -183,7 +444,7 @@ function renderJobs() {
             ${routeIds.includes(j.id) ? "Added ✓" : "Add to route"}
           </button>
           ${unlocked
-            ? `<button class="add-btn msg-btn" data-msg="${j.id}">Message</button>`
+            ? `<button class="add-btn accept-btn" data-accept="${j.id}">Accept job</button>`
             : `<button class="add-btn unlock-btn" data-unlock="${j.id}">${isPro() ? "Unlock — included in Pro" : "Unlock contact — £1.50"}</button>`}
         </div>
       </div>
@@ -210,18 +471,21 @@ document.getElementById("jobList").addEventListener("click", e => {
     startUnlock(Number(unlockBtn.dataset.unlock));
     return;
   }
-  const msgBtn = e.target.closest("[data-msg]");
-  if (msgBtn) openThread(Number(msgBtn.dataset.msg));
+  const acceptBtn = e.target.closest("[data-accept]");
+  if (acceptBtn) {
+    acceptJob(Number(acceptBtn.dataset.accept));
+    return;
+  }
 });
 
 /* ---------- unlock & mock payment ---------- */
-function startUnlock(id) {
+async function startUnlock(id) {
   if (!isVerified()) {
     openSheet("overlay-verifyPrompt");
     return;
   }
   if (isPro()) {
-    unlockJob(id);
+    await unlockJob(id);
     renderJobs();
     return;
   }
@@ -236,9 +500,9 @@ document.getElementById("payBtn").addEventListener("click", () => {
   const payBtn = document.getElementById("payBtn");
   payBtn.disabled = true;
   payBtn.textContent = "Processing…";
-  setTimeout(() => {
+  setTimeout(async () => {
     payBtn.textContent = "Paid ✓";
-    if (pendingUnlockId != null) unlockJob(pendingUnlockId);
+    if (pendingUnlockId != null) await unlockJob(pendingUnlockId);
     pendingUnlockId = null;
     setTimeout(() => { closeSheet(); renderJobs(); }, 500);
   }, 400);
@@ -268,18 +532,83 @@ document.getElementById("proBtn").addEventListener("click", () => {
   }, 400);
 });
 
-/* ---------- verification (demo) ---------- */
-document.getElementById("verifyForm").addEventListener("submit", e => {
+/* ---------- verification (live-checked against the EA public register) ---------- */
+const VERIFY_ENDPOINT = "/verify-collector";
+
+function setVerifyStatus(text, kind) {
+  const el = document.getElementById("verifyStatus");
+  el.textContent = text;
+  el.className = "demo-note" + (kind ? ` status-${kind}` : "");
+  el.classList.toggle("hidden", !text);
+}
+
+function describeCheckFailure(check, label) {
+  if (!check || !check.checked) return null;
+  if (!check.found) {
+    const hint = check.closestMatches && check.closestMatches.length
+      ? ` Closest matches on the register: ${check.closestMatches.map(m => m.number || m).join(", ")}.`
+      : "";
+    return `${label} not found on the register.${hint} Double-check the number.`;
+  }
+  if (check.expired) return `${label} was found but expired on ${check.expiryDate}.`;
+  return null;
+}
+
+document.getElementById("verifyForm").addEventListener("submit", async e => {
   e.preventDefault();
-  saveJSON("scrapman_collector", {
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  const profile = {
     businessName: document.getElementById("bizName").value,
     carrierRef: document.getElementById("carrierRef").value,
     smdCouncil: document.getElementById("smdCouncil").value,
     smdLicence: document.getElementById("smdLicence").value,
-    insurance: document.querySelector("#insuranceGroup .pill.active")?.dataset.ins === "yes",
-    status: "verified",
-    verifiedAt: Date.now()
+    insurance: document.querySelector("#insuranceGroup .pill.active")?.dataset.ins === "yes"
+  };
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Checking the register…";
+  setVerifyStatus("", null);
+
+  let result;
+  try {
+    const res = await fetch(VERIFY_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ carrierRef: profile.carrierRef, council: profile.smdCouncil, licenceNumber: profile.smdLicence })
+    });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    result = await res.json();
+  } catch {
+    result = null; // verification service unreachable — e.g. the verify-collector Node app isn't running
+  }
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = "Check & submit for verification";
+
+  if (!result) {
+    // Verification service unreachable — surface the failure rather than silently
+    // marking the collector verified (that would let a network blip bypass the check).
+    setVerifyStatus("We couldn't reach the verification service — please try again in a moment.", "error");
+    return;
+  }
+
+  if (!result.verified) {
+    const problems = [
+      describeCheckFailure(result.carrier, "Waste carrier registration"),
+      describeCheckFailure(result.scrapMetalLicence, "Scrap metal dealer licence")
+    ].filter(Boolean);
+    setVerifyStatus(problems.join(" ") || "We couldn't verify those details — please check and try again.", "error");
+    return;
+  }
+
+  await scrapmanDb.from("collector_profiles").upsert({
+    profile_id: scrapmanSession.user.id,
+    business_name: profile.businessName, carrier_ref: profile.carrierRef,
+    smd_council: profile.smdCouncil, smd_licence: profile.smdLicence, insurance: profile.insurance,
+    verification_status: "verified", verified_at: new Date().toISOString(),
+    ea_carrier: result.carrier, ea_scrap_metal_licence: result.scrapMetalLicence
   });
+  await scrapmanRefreshSession();
   goTo("account");
 });
 
@@ -293,13 +622,16 @@ document.getElementById("insuranceGroup").addEventListener("click", e => {
 /* ---------- account screen ---------- */
 function renderAccount() {
   const c = getCollector();
+  const verifyNote = c && c.eaCarrier
+    ? `<p class="demo-note status-ok">Verified live against the Environment Agency register${c.eaCarrier.expiryDate ? ` &middot; carrier reg expires ${esc(c.eaCarrier.expiryDate)}` : ""}${c.eaScrapMetalLicence && c.eaScrapMetalLicence.expiryDate ? ` &middot; licence expires ${esc(c.eaScrapMetalLicence.expiryDate)}` : ""}.</p>`
+    : "";
   document.getElementById("accVerify").innerHTML = c && c.status === "verified"
     ? `<div class="toggle-row">
          <div><strong>${esc(c.businessName || "Collector")}</strong>
            <span>Carrier reg ${esc(c.carrierRef || "—")} &middot; ${esc(c.smdCouncil || "—")} licence ${esc(c.smdLicence || "—")}</span></div>
          <span class="badge-verified">✓ Verified</span>
        </div>
-       <p class="demo-note">Demo — in a live service these details would be checked against the Environment Agency and council registers.</p>`
+       ${verifyNote}`
     : `<div class="toggle-row">
          <div><strong>Not verified</strong><span>Verify your licences to unlock homeowner contacts.</span></div>
          <button class="add-btn" data-nav="verify" id="accVerifyBtn">Get verified</button>
@@ -329,45 +661,75 @@ function renderAccount() {
   renderInstallRow();
 }
 
-document.getElementById("resetDemoBtn").addEventListener("click", () => {
-  if (confirm("Reset all demo data? Listings, unlocks, messages and your profile will be cleared.")) resetDemo();
-});
+/* ---------- messaging (per accepted job, backed by the real `messages` table — RLS
+   restricts each thread to that job's homeowner + assigned collector) ---------- */
+let scrapmanMessageChannel = null;
 
-/* ---------- messaging (demo) ---------- */
-function threadIds() {
-  const ids = new Set(Object.keys(getMessages()).map(Number));
-  unlockedIds().forEach(id => ids.add(id));
-  return [...ids];
+function unsubscribeFromThreadMessages() {
+  if (scrapmanMessageChannel) { scrapmanDb.removeChannel(scrapmanMessageChannel); scrapmanMessageChannel = null; }
+}
+
+function subscribeToThreadMessages(assignmentId) {
+  unsubscribeFromThreadMessages();
+  if (!scrapmanDb) return;
+  scrapmanMessageChannel = scrapmanDb
+    .channel(`thread:${assignmentId}:messages`)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `assignment_id=eq.${assignmentId}` }, () => renderThread())
+    .subscribe();
+}
+
+async function fetchMyThreads() {
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return [];
+  const { data, error } = await scrapmanDb
+    .from("job_assignments")
+    .select("id, status, listings(title)")
+    .order("accepted_at", { ascending: false });
+  if (error) { console.error(error); return []; }
+  return data || [];
+}
+
+async function fetchThreadMessages(assignmentId) {
+  const { data, error } = await scrapmanDb
+    .from("messages")
+    .select("*, profiles:sender_id(display_name)")
+    .eq("assignment_id", assignmentId)
+    .order("created_at", { ascending: true });
+  if (error) { console.error(error); return []; }
+  return data || [];
+}
+
+async function sendThreadMessage(assignmentId, body) {
+  if (!scrapmanSession) return;
+  await scrapmanDb.from("messages").insert({ assignment_id: assignmentId, sender_id: scrapmanSession.user.id, body });
 }
 
 function openThread(id) {
   currentThread = id;
   goTo("thread");
+  subscribeToThreadMessages(id);
 }
 
-function renderMessages() {
+async function renderMessages() {
   const listEl = document.getElementById("threadList");
   const emptyEl = document.getElementById("messagesEmpty");
-  const jobs = getAllJobs();
-  const ids = threadIds().filter(id => jobs.some(j => j.id === id));
+  const threads = await fetchMyThreads();
 
-  if (!ids.length) {
+  if (!threads.length) {
     emptyEl.classList.remove("hidden");
     listEl.innerHTML = "";
     return;
   }
   emptyEl.classList.add("hidden");
-  listEl.innerHTML = ids.map(id => {
-    const job = jobs.find(j => j.id === id);
-    const msgs = getThread(id);
+  const previews = await Promise.all(threads.map(async t => ({ thread: t, msgs: await fetchThreadMessages(t.id) })));
+  listEl.innerHTML = previews.map(({ thread, msgs }) => {
     const last = msgs[msgs.length - 1];
     return `
-      <button class="thread-row" data-thread="${id}">
+      <button class="thread-row" data-thread="${thread.id}">
         <div>
-          <h4>${esc(job.title)}</h4>
-          <span>${last ? esc(last.text) : "Start the conversation"}</span>
+          <h4>${esc(thread.listings.title)}</h4>
+          <span>${last ? esc(last.body) : "Start the conversation"}</span>
         </div>
-        ${last ? `<time>${new Date(last.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>` : ""}
+        ${last ? `<time>${new Date(last.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>` : ""}
       </button>`;
   }).join("");
 }
@@ -377,48 +739,32 @@ document.getElementById("threadList").addEventListener("click", e => {
   if (row) openThread(Number(row.dataset.thread));
 });
 
-function threadRole(id) {
-  return myListingIds().includes(id) ? "homeowner" : "collector";
-}
-
-function renderThread() {
+async function renderThread() {
   if (currentThread == null) { goTo("messages"); return; }
-  const job = getAllJobs().find(j => j.id === currentThread);
-  document.getElementById("threadTitle").textContent = job ? job.title : "Conversation";
-  const me = threadRole(currentThread);
-  const msgs = getThread(currentThread);
+  const { data: assignment } = await scrapmanDb.from("job_assignments").select("id, listings(title)").eq("id", currentThread).single();
+  document.getElementById("threadTitle").textContent = assignment ? assignment.listings.title : "Conversation";
+
+  const myId = scrapmanSession.user.id;
+  const msgs = await fetchThreadMessages(currentThread);
   const listEl = document.getElementById("msgList");
   listEl.innerHTML = msgs.length
     ? msgs.map(m => `
-        <div class="msg ${m.from === me ? "me" : ""}">
-          <p>${esc(m.text)}</p>
-          <span class="msg-meta">${m.from === "collector" ? "Collector" : "Homeowner"} &middot; ${new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+        <div class="msg ${m.sender_id === myId ? "me" : ""}">
+          <p>${esc(m.body)}</p>
+          <span class="msg-meta">${esc((m.profiles && m.profiles.display_name) || "")} &middot; ${new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
         </div>`).join("")
     : `<p class="msg-empty">No messages yet — say hello and agree a pickup time.</p>`;
   listEl.scrollTop = listEl.scrollHeight;
 }
 
-document.getElementById("msgForm").addEventListener("submit", e => {
+document.getElementById("msgForm").addEventListener("submit", async e => {
   e.preventDefault();
   const input = document.getElementById("msgInput");
   const text = input.value.trim();
   if (!text || currentThread == null) return;
-  const me = threadRole(currentThread);
-  const threadAtSend = currentThread;
-  sendMessage(threadAtSend, me, text);
   input.value = "";
+  await sendThreadMessage(currentThread, text);
   renderThread();
-  // Canned demo reply from the other side
-  const reply = me === "collector"
-    ? "Great — it's in the front garden, knock when you arrive 👍"
-    : "No problem, I can swing by tomorrow morning if that suits?";
-  setTimeout(() => {
-    sendMessage(threadAtSend, me === "collector" ? "homeowner" : "collector", reply);
-    if (currentThread === threadAtSend &&
-        document.getElementById("screen-thread").classList.contains("active")) {
-      renderThread();
-    }
-  }, 1500);
 });
 
 /* ---------- install prompt ---------- */
@@ -483,19 +829,20 @@ document.getElementById("filterRow").addEventListener("click", e => {
   renderJobs();
 });
 
-function initJobsMap() {
+async function initJobsMap() {
   const el = document.getElementById("jobsMap");
   if (!el || el.offsetParent === null) return;
   if (typeof L === "undefined") { renderJobs(); return; } // CDN unreachable/offline — list still works
   if (jobsMap) { jobsMap.remove(); jobsMap = null; }
-  jobsMap = L.map("jobsMap", { zoomControl: false, attributionControl: false }).setView([DEPOT.lat, DEPOT.lng], 12);
+  jobsMap = L.map("jobsMap", { zoomControl: false, attributionControl: false }).setView([DEPOT.lat, DEPOT.lng], usingDefaultLocation ? 11 : 12);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(jobsMap);
-  L.marker([DEPOT.lat, DEPOT.lng]).addTo(jobsMap).bindPopup("You are here");
-  getAllJobs().filter(j => activeFilter === "all" || j.type === activeFilter).forEach(j => {
+  L.marker([DEPOT.lat, DEPOT.lng]).addTo(jobsMap).bindPopup(usingDefaultLocation ? "Default location — set yours" : "You are here");
+  const jobs = await getAllJobs();
+  jobs.filter(j => activeFilter === "all" || j.type === activeFilter).forEach(j => {
     const marker = L.circleMarker([j.lat, j.lng], {
       radius: 8,
-      color: routeIds.includes(j.id) ? "#1e293b" : "#059669",
-      fillColor: routeIds.includes(j.id) ? "#334155" : "#059669",
+      color: routeIds.includes(j.id) ? "#037a56" : "#e05f00",
+      fillColor: routeIds.includes(j.id) ? "#04966b" : "#ff6b00",
       fillOpacity: 0.9,
       weight: 2
     }).addTo(jobsMap);
@@ -522,8 +869,8 @@ function nearestNeighborRoute(jobs) {
   return order;
 }
 
-function renderRoute() {
-  const jobs = getAllJobs().filter(j => routeIds.includes(j.id));
+async function renderRoute() {
+  const jobs = (await getAllJobs()).filter(j => routeIds.includes(j.id));
   const emptyEl = document.getElementById("routeEmpty");
   const contentEl = document.getElementById("routeContent");
 
@@ -571,17 +918,17 @@ function renderRoute() {
   const el = document.getElementById("routeMap");
   if (typeof L === "undefined") return; // stats + stop list above still render offline
   if (routeMap) { routeMap.remove(); routeMap = null; }
-  routeMap = L.map("routeMap", { zoomControl: false, attributionControl: false }).setView([DEPOT.lat, DEPOT.lng], 12);
+  routeMap = L.map("routeMap", { zoomControl: false, attributionControl: false }).setView([DEPOT.lat, DEPOT.lng], usingDefaultLocation ? 11 : 12);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(routeMap);
-  L.marker([DEPOT.lat, DEPOT.lng]).addTo(routeMap).bindPopup("Start");
+  L.marker([DEPOT.lat, DEPOT.lng]).addTo(routeMap).bindPopup(`Start — ${locationLabel()}`);
   const latlngs = [[DEPOT.lat, DEPOT.lng]];
   ordered.forEach((j, i) => {
-    L.circleMarker([j.lat, j.lng], { radius: 9, color: "#1e293b", fillColor: "#059669", fillOpacity: 1, weight: 2 })
+    L.circleMarker([j.lat, j.lng], { radius: 9, color: "#037a56", fillColor: "#04966b", fillOpacity: 1, weight: 2 })
       .addTo(routeMap)
       .bindTooltip(String(i + 1), { permanent: true, direction: "center", className: "route-num-tip" });
     latlngs.push([j.lat, j.lng]);
   });
-  L.polyline(latlngs, { color: "#059669", weight: 3, dashArray: "6 6" }).addTo(routeMap);
+  L.polyline(latlngs, { color: "#ff6b00", weight: 3, dashArray: "6 6" }).addTo(routeMap);
   routeMap.fitBounds(latlngs, { padding: [24, 24] });
 }
 
@@ -619,6 +966,15 @@ document.getElementById("postcode").addEventListener("input", () => {
   document.getElementById("postcode").setCustomValidity("");
 });
 
+/* If we already know the homeowner's location (cached, or previously granted),
+   prefill the postcode field — only ever touches it while it's still empty. */
+function prefillPostcodeFromLocation() {
+  const input = document.getElementById("postcode");
+  if (input.value) return;
+  const loc = scrapmanSavedLocation();
+  if (loc && loc.postcode) input.value = loc.postcode;
+}
+
 document.getElementById("listForm").addEventListener("submit", async e => {
   e.preventDefault();
 
@@ -639,9 +995,7 @@ document.getElementById("listForm").addEventListener("submit", async e => {
   }
   postcodeInput.setCustomValidity("");
 
-  const listings = loadJSON("scrapman_listings", []);
   const newListing = {
-    id: 1000 + listings.length,
     title: document.getElementById("itemTitle").value,
     type: document.getElementById("metalType").value || "mixed",
     weight: selectedWeight || "small",
@@ -652,8 +1006,24 @@ document.getElementById("listForm").addEventListener("submit", async e => {
     contactName: document.getElementById("contactName").value,
     contactPhone: document.getElementById("contactPhone").value
   };
-  listings.push(newListing);
-  saveJSON("scrapman_listings", listings);
+
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) {
+    alert("Something went wrong — please sign in and try again.");
+    return;
+  }
+
+  const { data: inserted, error } = await scrapmanDb.from("listings").insert({
+    homeowner_id: scrapmanSession.user.id,
+    title: newListing.title, metal_type: newListing.type, weight_band: newListing.weight,
+    urgency: newListing.urgency, lat: newListing.lat, lng: newListing.lng, address: newListing.address
+  }).select().single();
+  if (error || !inserted) {
+    alert("Couldn't create your listing — please try again.");
+    return;
+  }
+  await scrapmanDb.from("listing_contacts").insert({
+    listing_id: inserted.id, contact_name: newListing.contactName, contact_phone: newListing.contactPhone
+  });
 
   e.target.reset();
   document.getElementById("photoPreview").style.backgroundImage = "";
@@ -665,6 +1035,7 @@ document.getElementById("listForm").addEventListener("submit", async e => {
 
 /* ---------- init ---------- */
 renderJobs();
+personalizeCouncilLink();
 
 /* ---------- PWA service worker ---------- */
 if ("serviceWorker" in navigator) {

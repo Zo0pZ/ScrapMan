@@ -4,9 +4,9 @@
   "description": "Free doorstep scrap metal collection for households — and smarter routes for collectors.",
   "start_url": "index.html",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#1e293b",
+  "background_color": "#f5f6f8",
+  "theme_color": "#12161a",
   "icons": [
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "scrap-man-logo-v1-square.png", "sizes": "980x980", "type": "image/png", "purpose": "any maskable" }
   ]
 }

@@ -1,14 +1,20 @@
-const CACHE = "scrapman-v4";
+const CACHE = "scrapman-v13";
 const ASSETS = [
   "./",
   "./index.html",
   "./style.css",
+  "./geo.js",
+  "./supabase-config.js",
+  "./auth.js",
   "./app.js",
   "./manifest.json",
   "./icon.svg",
+  "./scrap-man-logo-v1.png",
+  "./scrap-man-logo-v1-square.png",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
-  "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2",
+  "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@600;700&display=swap"
 ];
 
 self.addEventListener("install", e => {
@@ -27,12 +33,23 @@ self.addEventListener("activate", e => {
 
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
-  // Never cache API or map tiles — always go to network, fall back gracefully
-  if (url.hostname === "api.postcodes.io" || url.hostname.endsWith("tile.openstreetmap.org")) {
+  // Never cache API calls, Supabase, or map tiles — always go to network, fall back gracefully
+  if (url.hostname === "api.postcodes.io" || url.hostname.endsWith("tile.openstreetmap.org") ||
+      url.hostname.endsWith(".supabase.co") || url.pathname === "/verify-collector") {
     return; // let the browser handle it normally
   }
-  // Cache-first for app shell assets
+  // Network-first for the app shell: whenever you're online you always get the current
+  // code (no stale-cache trap after a deploy), and the cache is purely an offline
+  // fallback. Cache-first was tried here originally and repeatedly served stale JS
+  // after edits during development — network-first with a cache fallback is the safer
+  // default for files that change often, vs. content-hashed assets that never do.
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
+    fetch(e.request)
+      .then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy));
+        return res;
+      })
+      .catch(() => caches.match(e.request))
   );
 });

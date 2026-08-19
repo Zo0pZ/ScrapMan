@@ -1,0 +1,11 @@
+# Local dev tooling — not part of the deployed site
+.mcp.json
+design-system/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+
+# Never commit real secrets
+.env
+.env.local
