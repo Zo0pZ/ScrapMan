@@ -72,6 +72,23 @@ async function scrapmanSignIn({ email, password }) {
   return { data };
 }
 
+async function scrapmanRequestPasswordReset(email) {
+  if (!scrapmanDb) return { error: { message: "Not available right now." } };
+  const { error } = await scrapmanDb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+  if (error) return { error };
+  return { data: true };
+}
+
+async function scrapmanUpdatePassword(newPassword) {
+  if (!scrapmanDb) return { error: { message: "Not available right now." } };
+  const { data, error } = await scrapmanDb.auth.updateUser({ password: newPassword });
+  if (error) return { error };
+  await scrapmanRefreshSession();
+  return { data };
+}
+
 async function scrapmanSignOut() {
   if (!scrapmanDb) return;
   await scrapmanDb.auth.signOut();
@@ -100,7 +117,7 @@ function scrapmanApplyRoleUI() {
     if (SCRAPMAN_AUTH_CONFIGURED && !scrapmanSession) el.classList.add("hidden");
   });
   const nameEls = document.querySelectorAll(".scrapman-display-name");
-  nameEls.forEach(el => { el.textContent = scrapmanSession ? scrapmanSession.profile.display_name : ""; });
+  nameEls.forEach(el => { el.textContent = (scrapmanSession && scrapmanSession.profile) ? scrapmanSession.profile.display_name : ""; });
   const roleLabel = document.getElementById("accRoleLabel");
   if (roleLabel) roleLabel.textContent = role ? (role === "collector" ? "Collector account" : "Homeowner account") : "";
 }
@@ -158,7 +175,17 @@ function scrapmanStopBroadcastingLocation() {
 
 /* ---------- boot ---------- */
 if (scrapmanDb) {
-  scrapmanDb.auth.onAuthStateChange((_event, _session) => { scrapmanRefreshSession().then(scrapmanApplyRoleUI); });
+  scrapmanDb.auth.onAuthStateChange((event, _session) => {
+    // Wait for scrapmanSession to actually be populated before announcing recovery mode —
+    // otherwise the existing "no session -> redirect to auth" listener on scrapman:auth
+    // (app.js) could win the race and bounce straight past the reset-password screen.
+    scrapmanRefreshSession().then(() => {
+      scrapmanApplyRoleUI();
+      if (event === "PASSWORD_RECOVERY") {
+        window.dispatchEvent(new CustomEvent("scrapman:passwordRecovery"));
+      }
+    });
+  });
   scrapmanRefreshSession().then(scrapmanApplyRoleUI);
 } else {
   // Unconfigured — nothing is hidden, app behaves as the original open demo.

@@ -84,10 +84,32 @@
           <span>Password</span>
           <input type="password" id="authPassword" placeholder="At least 6 characters" autocomplete="current-password" required minlength="6">
         </label>
+        <button type="button" class="link-btn hidden" id="forgotPasswordLink" style="align-self:flex-end; padding:0; margin-top:-8px;">Forgot password?</button>
         <p class="demo-note hidden" id="authStatus"></p>
         <button type="submit" class="cta cta-primary full-width" id="authSubmitBtn">Create account</button>
       </form>
       <button type="button" class="link-btn" id="authToggleMode" style="align-self:center; display:block; margin:8px auto 0">Already have an account? Sign in</button>
+    </section>
+
+    <!-- RESET PASSWORD (only reachable via the emailed recovery link) -->
+    <section class="screen" id="screen-reset-password">
+      <div class="hero" style="padding-top:10px">
+        <p class="eyebrow">Account</p>
+        <h1>Set a new password</h1>
+        <p class="hero-sub">Choose a new password for your ScrapMan account.</p>
+      </div>
+      <form id="resetPasswordForm" class="stack-form" style="margin-top:16px">
+        <label class="field">
+          <span>New password</span>
+          <input type="password" id="newPassword" placeholder="At least 6 characters" autocomplete="new-password" required minlength="6">
+        </label>
+        <label class="field">
+          <span>Confirm new password</span>
+          <input type="password" id="confirmNewPassword" placeholder="Re-enter password" autocomplete="new-password" required minlength="6">
+        </label>
+        <p class="demo-note hidden" id="resetPasswordStatus"></p>
+        <button type="submit" class="cta cta-primary full-width" id="resetPasswordSubmitBtn">Set new password</button>
+      </form>
     </section>
 
     <!-- HOME -->
@@ -495,6 +517,21 @@
         </div>
       </div>
       <button class="cta cta-primary full-width" id="proBtn">Subscribe &mdash; &pound;6.99/mo</button>
+      <button class="link-btn sheet-close">Cancel</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay-forgotPassword">
+    <div class="sheet">
+      <span class="sheet-handle" aria-hidden="true"></span>
+      <h3>Reset your password</h3>
+      <p class="sheet-sub">Enter your account email and we'll send you a link to set a new password.</p>
+      <label class="field">
+        <span>Email</span>
+        <input type="email" id="forgotEmail" placeholder="you@example.com" autocomplete="email" required>
+      </label>
+      <p class="demo-note hidden" id="forgotStatus"></p>
+      <button class="cta cta-primary full-width" id="sendResetBtn">Send reset link</button>
       <button class="link-btn sheet-close">Cancel</button>
     </div>
   </div>

@@ -99,6 +99,7 @@ function applyAuthMode() {
   document.getElementById("authNameField").classList.toggle("hidden", !isSignup);
   document.getElementById("authSubmitBtn").textContent = isSignup ? "Create account" : "Sign in";
   document.getElementById("authToggleMode").textContent = isSignup ? "Already have an account? Sign in" : "New here? Create an account";
+  document.getElementById("forgotPasswordLink").classList.toggle("hidden", isSignup);
 }
 applyAuthMode();
 
@@ -157,6 +158,66 @@ document.getElementById("authForm").addEventListener("submit", async e => {
 document.getElementById("signOutBtn").addEventListener("click", async () => {
   await scrapmanSignOut();
   goTo("auth");
+});
+
+/* ---------- forgot / reset password ---------- */
+document.getElementById("forgotPasswordLink").addEventListener("click", () => {
+  document.getElementById("forgotEmail").value = document.getElementById("authEmail").value;
+  document.getElementById("forgotStatus").classList.add("hidden");
+  openSheet("overlay-forgotPassword");
+});
+
+document.getElementById("sendResetBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("sendResetBtn");
+  const statusEl = document.getElementById("forgotStatus");
+  const email = document.getElementById("forgotEmail").value;
+  if (!email) return;
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+  const result = await scrapmanRequestPasswordReset(email);
+  btn.disabled = false;
+  btn.textContent = "Send reset link";
+  statusEl.textContent = result.error
+    ? (result.error.message || "Something went wrong — please try again.")
+    : "Check your email for a link to reset your password.";
+  statusEl.className = "demo-note " + (result.error ? "status-error" : "status-ok");
+  statusEl.classList.remove("hidden");
+});
+
+window.addEventListener("scrapman:passwordRecovery", () => {
+  closeSheet();
+  goTo("reset-password");
+});
+
+document.getElementById("resetPasswordForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = document.getElementById("resetPasswordSubmitBtn");
+  const statusEl = document.getElementById("resetPasswordStatus");
+  const newPassword = document.getElementById("newPassword").value;
+  const confirmNewPassword = document.getElementById("confirmNewPassword").value;
+  statusEl.classList.add("hidden");
+
+  if (newPassword !== confirmNewPassword) {
+    statusEl.textContent = "Those passwords don't match.";
+    statusEl.className = "demo-note status-error";
+    statusEl.classList.remove("hidden");
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Setting password…";
+  const result = await scrapmanUpdatePassword(newPassword);
+  btn.disabled = false;
+  btn.textContent = "Set new password";
+
+  if (result.error) {
+    statusEl.textContent = result.error.message || "Something went wrong — please try again.";
+    statusEl.className = "demo-note status-error";
+    statusEl.classList.remove("hidden");
+    return;
+  }
+  e.target.reset();
+  goTo("home");
 });
 
 window.addEventListener("scrapman:auth", () => {
