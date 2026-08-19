@@ -7,6 +7,6 @@
   "background_color": "#f5f6f8",
   "theme_color": "#12161a",
   "icons": [
-    { "src": "scrap-man-logo-v1-square.png", "sizes": "980x980", "type": "image/png", "purpose": "any maskable" }
+    { "src": "scrapman-logo-icon-only.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]
 }

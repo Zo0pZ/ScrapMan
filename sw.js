@@ -1,4 +1,4 @@
-const CACHE = "scrapman-v14";
+const CACHE = "scrapman-v15";
 const ASSETS = [
   "./",
   "./index.html",
@@ -8,8 +8,7 @@ const ASSETS = [
   "./auth.js",
   "./app.js",
   "./manifest.json",
-  "./scrap-man-logo-v1.png",
-  "./scrap-man-logo-v1-square.png",
+  "./scrapman-logo-icon-only.svg",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2",
