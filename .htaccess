@@ -1,0 +1,22 @@
+<IfModule mod_headers.c>
+  # Content-Security-Policy: locked to the specific origins the app actually
+  # calls (Supabase, jsDelivr for the Supabase SDK, unpkg for Leaflet, Google
+  # Fonts, postcodes.io). No 'unsafe-inline' on script-src — index.html and
+  # geo.js were adjusted to avoid inline event handlers so this can stay strict.
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://bvfhcwfifjyododertvx.supabase.co wss://bvfhcwfifjyododertvx.supabase.co https://api.postcodes.io; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
+
+  # HSTS: low initial max-age (1 day) per Google's own rollout guidance —
+  # raise this over time once you're confident nothing on the domain needs
+  # plain HTTP, then consider adding preload.
+  Header always set Strict-Transport-Security "max-age=86400; includeSubDomains"
+
+  # Clickjacking protection (frame-ancestors above covers modern browsers;
+  # X-Frame-Options is the fallback for older ones).
+  Header always set X-Frame-Options "SAMEORIGIN"
+
+  # Isolates this origin's top-level browsing context from other windows/tabs.
+  Header always set Cross-Origin-Opener-Policy "same-origin"
+
+  # Stops browsers from MIME-sniffing responses away from the declared Content-Type.
+  Header always set X-Content-Type-Options "nosniff"
+</IfModule>

@@ -3,6 +3,14 @@
    Everything here degrades quietly: geolocation denied, offline, or the
    postcodes.io API being unreachable all just resolve to null rather than throw. */
 
+/* Swaps the async-loaded Leaflet stylesheet from media="print" (non-render-blocking)
+   to "all" once it's actually fetched. Done here instead of an inline onload= attribute
+   so the page's CSP can omit script-src 'unsafe-inline'. */
+(function () {
+  var leafletCss = document.getElementById("leafletCssAsync");
+  if (leafletCss) leafletCss.addEventListener("load", function () { this.media = "all"; });
+})();
+
 /* Turn a postcodes.io admin_district name (eg. "Bristol, City of", "St Helens")
    into GOV.UK's find-local-council URL slug (eg. "bristol", "st-helens"). GOV.UK
    doesn't expose this as an API — the slug is just their own hyphenated council
