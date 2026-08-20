@@ -5,10 +5,19 @@
 
 /* Swaps the async-loaded Leaflet stylesheet from media="print" (non-render-blocking)
    to "all" once it's actually fetched. Done here instead of an inline onload= attribute
-   so the page's CSP can omit script-src 'unsafe-inline'. */
+   so the page's CSP can omit script-src 'unsafe-inline'.
+   The link is tiny and starts fetching as soon as <head> is parsed, so by the time this
+   script (near the end of <body>) runs, it may well have already finished loading —
+   in which case the "load" event already fired and a listener alone would miss it
+   forever, leaving the map permanently unstyled. `.sheet` is populated once a
+   stylesheet has been fetched and parsed regardless of whether its media currently
+   matches, so checking it first covers that race. */
 (function () {
   var leafletCss = document.getElementById("leafletCssAsync");
-  if (leafletCss) leafletCss.addEventListener("load", function () { this.media = "all"; });
+  if (!leafletCss) return;
+  function activate() { leafletCss.media = "all"; }
+  if (leafletCss.sheet) activate();
+  else leafletCss.addEventListener("load", activate);
 })();
 
 /* Turn a postcodes.io admin_district name (eg. "Bristol, City of", "St Helens")
