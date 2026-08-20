@@ -3,16 +3,27 @@
    Everything here degrades quietly: geolocation denied, offline, or the
    postcodes.io API being unreachable all just resolve to null rather than throw. */
 
-/* admin_district (postcodes.io) -> ScrapMan council landing page */
-const SCRAPMAN_COUNCILS = {
-  "Birmingham": "free-scrap-collection-birmingham.html",
-  "Coventry": "free-scrap-collection-coventry.html",
-  "Dudley": "free-scrap-collection-dudley.html",
-  "Sandwell": "free-scrap-collection-sandwell.html",
-  "Solihull": "free-scrap-collection-solihull.html",
-  "Walsall": "free-scrap-collection-walsall.html",
-  "Wolverhampton": "free-scrap-collection-wolverhampton.html"
-};
+/* Turn a postcodes.io admin_district name (eg. "Bristol, City of", "St Helens")
+   into GOV.UK's find-local-council URL slug (eg. "bristol", "st-helens"). GOV.UK
+   doesn't expose this as an API — the slug is just their own hyphenated council
+   name — so this is a best-effort match rather than a guaranteed one; a handful
+   of councils with irregular official spellings can still 404 through to
+   GOV.UK's own not-found page rather than a specific result. */
+function scrapmanCouncilSlug(council) {
+  return String(council || "")
+    .split(",")[0] // drop unitary-authority suffixes like ", City of" / ", County of"
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/* Every UK council has a page here — no per-council data to maintain. */
+function scrapmanCouncilLink(council) {
+  const slug = scrapmanCouncilSlug(council);
+  return slug ? `https://www.gov.uk/find-local-council/${slug}` : "https://www.gov.uk/find-local-council";
+}
 
 const SCRAPMAN_LOCATION_KEY = "scrapman_user_location";
 const SCRAPMAN_LOCATION_MAX_AGE = 24 * 60 * 60 * 1000; // 1 day

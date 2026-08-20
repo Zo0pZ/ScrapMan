@@ -78,7 +78,7 @@ function goTo(screen) {
   if (screen === "list") prefillPostcodeFromLocation();
   if (screen === "messages") renderMessages();
   if (screen === "thread") renderThread();
-  if (screen === "account") renderAccount();
+  if (screen === "account") { renderAccount(); personalizeCouncilLink(); }
 }
 
 document.querySelectorAll("[data-nav]").forEach(el => {
@@ -319,12 +319,19 @@ function refreshLocationDependentScreens() {
    already know it (never forces a permission prompt on its own). */
 async function personalizeCouncilLink() {
   const linkEl = document.getElementById("councilLink");
-  if (!linkEl) return;
+  const accLinkEl = document.getElementById("accCouncilLink");
+  if (!linkEl && !accLinkEl) return;
   const loc = scrapmanSavedLocation() || await scrapmanAutoLocate();
-  if (loc && loc.council && SCRAPMAN_COUNCILS[loc.council]) {
-    linkEl.href = SCRAPMAN_COUNCILS[loc.council];
+  if (!loc || !loc.council) return;
+  const href = scrapmanCouncilLink(loc.council);
+  if (linkEl) {
+    linkEl.href = href;
     linkEl.textContent = `See ${loc.council}'s bulky waste charges →`;
     document.getElementById("locateCouncilBtn")?.classList.add("hidden");
+  }
+  if (accLinkEl) {
+    accLinkEl.href = href;
+    document.getElementById("accCouncilSub").textContent = `${loc.council}'s bulky waste charges`;
   }
 }
 
@@ -335,12 +342,12 @@ document.getElementById("locateCouncilBtn")?.addEventListener("click", async btn
   btn.disabled = false;
   if (!loc) { alert("Couldn't get your location — check your browser's location permissions."); return; }
   const linkEl = document.getElementById("councilLink");
-  if (loc.council && SCRAPMAN_COUNCILS[loc.council]) {
-    linkEl.href = SCRAPMAN_COUNCILS[loc.council];
+  if (loc.council) {
+    linkEl.href = scrapmanCouncilLink(loc.council);
     linkEl.textContent = `See ${loc.council}'s bulky waste charges →`;
     btn.classList.add("hidden");
   } else {
-    linkEl.textContent = `Compare bulky waste charges (no ${loc.council || "local"} guide yet) →`;
+    linkEl.textContent = "Couldn't work out your council — try entering a postcode instead →";
   }
 });
 
