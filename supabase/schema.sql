@@ -110,11 +110,19 @@ create policy "homeowners manage their own listings"
   using (auth.uid() = homeowner_id)
   with check (auth.uid() = homeowner_id);
 
--- ---------- Contact unlocks (pay-per-job / Pro) ----------
+-- ---------- Contact unlocks (pay-per-job, via Stripe) ----------
+-- Rows here are only ever written by the verify-collector Node app's service_role
+-- key, after Stripe confirms a real payment (see its webhook handler) — there is
+-- deliberately no insert policy for collectors themselves, so the browser can never
+-- grant an unlock on its own.
 create table job_unlocks (
   listing_id bigint references listings(id) on delete cascade,
   collector_id uuid references profiles(id) on delete cascade,
   unlocked_at timestamptz not null default now(),
+  amount_pence integer,
+  currency text,
+  stripe_checkout_session_id text,
+  stripe_payment_intent_id text,
   primary key (listing_id, collector_id)
 );
 
@@ -122,11 +130,40 @@ alter table job_unlocks enable row level security;
 
 create policy "collectors see their own unlocks"
   on job_unlocks for select using (auth.uid() = collector_id);
-create policy "collectors create their own unlocks"
-  on job_unlocks for insert with check (auth.uid() = collector_id);
 create policy "homeowners see who unlocked their listing"
   on job_unlocks for select
   using (exists (select 1 from listings l where l.id = listing_id and l.homeowner_id = auth.uid()));
+
+-- ---------- Pro subscription (Stripe) ----------
+-- Same write model as job_unlocks: only service_role (the webhook handler) ever
+-- inserts/updates a row here.
+create table pro_subscriptions (
+  collector_id uuid primary key references profiles(id) on delete cascade,
+  stripe_customer_id text not null,
+  stripe_subscription_id text not null unique,
+  status text not null check (status in (
+    'active', 'trialing', 'past_due', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired'
+  )),
+  current_period_end timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+alter table pro_subscriptions enable row level security;
+
+create policy "collectors see their own subscription"
+  on pro_subscriptions for select using (auth.uid() = collector_id);
+
+create or replace function touch_pro_subscriptions_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger pro_subscriptions_touch_updated_at
+  before update on pro_subscriptions
+  for each row execute function touch_pro_subscriptions_updated_at();
 
 -- ---------- Listing contacts (exact address + phone, gated by job_unlocks) ----------
 -- Split out from listings so the marketplace-browse policy above can stay wide open
@@ -146,12 +183,21 @@ create policy "homeowners manage their own listing contact info"
   using (exists (select 1 from listings l where l.id = listing_id and l.homeowner_id = auth.uid()))
   with check (exists (select 1 from listings l where l.id = listing_id and l.homeowner_id = auth.uid()));
 
-create policy "collectors who unlocked the job can read contact info"
+-- A collector can read a listing's contact info if they've paid to unlock that
+-- specific job, OR if they have an active/trialing Pro subscription (Pro means every
+-- job's contact details are already visible, not "unlock skips payment").
+create policy "collectors who unlocked the job or are Pro can read contact info"
   on listing_contacts for select
-  using (exists (
-    select 1 from job_unlocks u
-    where u.listing_id = listing_contacts.listing_id and u.collector_id = auth.uid()
-  ));
+  using (
+    exists (
+      select 1 from job_unlocks u
+      where u.listing_id = listing_contacts.listing_id and u.collector_id = auth.uid()
+    )
+    or exists (
+      select 1 from pro_subscriptions p
+      where p.collector_id = auth.uid() and p.status in ('active', 'trialing')
+    )
+  );
 
 -- ---------- Job assignments (accept -> en route -> weighed -> completed) ----------
 create type assignment_status as enum ('accepted','en_route','arrived','weighed','completed','cancelled');

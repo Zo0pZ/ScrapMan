@@ -10,3 +10,6 @@ Thumbs.db
 # Never commit real secrets
 .env
 .env.local
+
+# Node dependencies (verify-collector/) — installed via npm, not shipped in git
+node_modules/

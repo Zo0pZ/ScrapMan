@@ -35,20 +35,11 @@ let currentThread = null;
 let pendingUnlockId = null;
 let deferredInstallPrompt = null;
 
-async function fetchUnlockedIds() {
-  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return [];
-  const { data } = await scrapmanDb.from("job_unlocks").select("listing_id").eq("collector_id", scrapmanSession.user.id);
-  return (data || []).map(r => r.listing_id);
-}
-
-async function unlockJob(id) {
-  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return;
-  await scrapmanDb.from("job_unlocks").upsert({ listing_id: id, collector_id: scrapmanSession.user.id });
-}
-function isPro() { return !!loadJSON("scrapman_pro", null)?.active; }
-function setPro(active) {
-  if (active) saveJSON("scrapman_pro", { active: true, since: Date.now() });
-  else localStorage.removeItem("scrapman_pro");
+// Real subscription status, fetched server-side and cached on scrapmanSession by
+// auth.js — only ever written by the Stripe webhook handler in verify-collector/.
+function isPro() {
+  const sub = scrapmanSession && scrapmanSession.proSubscription;
+  return !!sub && (sub.status === "active" || sub.status === "trialing");
 }
 function getCollector() {
   if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return null;
@@ -353,12 +344,15 @@ document.getElementById("locateCouncilBtn")?.addEventListener("click", async btn
 
 /* ---------- jobs screen ---------- */
 function mapListingRow(row) {
-  // listing_contacts is RLS-gated by job_unlocks — this embed comes back null for any
-  // job the signed-in collector hasn't unlocked, so no extra round trip is needed.
+  // listing_contacts is RLS-gated by job_unlocks OR an active Pro subscription — this
+  // embed comes back null for any job the signed-in collector hasn't unlocked (and
+  // isn't Pro for), so its presence alone tells us whether the job is unlocked; no
+  // separate job_unlocks lookup is needed.
   const contact = row.listing_contacts || null;
   return {
     id: row.id, title: row.title, type: row.metal_type, weight: row.weight_band,
     lat: row.lat, lng: row.lng, address: row.address, urgency: row.urgency,
+    unlocked: !!contact,
     contactName: contact && contact.contact_name, contactPhone: contact && contact.contact_phone,
     fullAddress: contact && contact.full_address
   };
@@ -492,14 +486,14 @@ function contactBlockHTML(j) {
 
 async function renderJobs() {
   const list = document.getElementById("jobList");
-  const [allJobs, unlockedNow] = await Promise.all([getAllJobs(), fetchUnlockedIds()]);
+  const allJobs = await getAllJobs();
   const jobs = allJobs
     .filter(j => activeFilter === "all" || j.type === activeFilter)
     .map(j => ({ ...j, dist: haversine(DEPOT, j) }))
     .sort((a, b) => a.dist - b.dist);
 
   list.innerHTML = jobs.map(j => {
-    const unlocked = unlockedNow.includes(j.id);
+    const unlocked = j.unlocked;
     return `
     <div class="job-card">
       <span class="job-icon" aria-hidden="true">${TYPE_ICON[j.type] || TYPE_ICON.mixed}</span>
@@ -518,7 +512,7 @@ async function renderJobs() {
           </button>
           ${unlocked
             ? `<button class="add-btn accept-btn" data-accept="${j.id}">Accept job</button>`
-            : `<button class="add-btn unlock-btn" data-unlock="${j.id}">${isPro() ? "Unlock — included in Pro" : "Unlock contact — £1.50"}</button>`}
+            : `<button class="add-btn unlock-btn" data-unlock="${j.id}">Unlock contact — £1.50</button>`}
         </div>
       </div>
     </div>`;
@@ -551,15 +545,33 @@ document.getElementById("jobList").addEventListener("click", e => {
   }
 });
 
-/* ---------- unlock & mock payment ---------- */
+/* ---------- unlock & payment (real Stripe Checkout — see verify-collector/server.js) ----------
+   Both flows redirect the whole page to Stripe's hosted checkout page; nothing is
+   provisioned until Stripe's webhook confirms the payment server-side (see
+   supabase/migrations/001_stripe_payments.sql for why the client can't grant this
+   itself). Same cPanel Node app as VERIFY_ENDPOINT (declared further down) — kept as
+   its own constant here rather than referencing that one, since it's declared later
+   in this file and top-level `const` can't be read before its own declaration runs. */
+const BILLING_ENDPOINT = "/verify-collector";
+
+async function startStripeCheckout(path, body) {
+  const { data: { session } } = await scrapmanDb.auth.getSession();
+  const res = await fetch(`${BILLING_ENDPOINT}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session && session.access_token}`
+    },
+    body: JSON.stringify(body || {})
+  });
+  if (!res.ok) throw new Error(`status ${res.status}`);
+  const { url } = await res.json();
+  window.location.href = url;
+}
+
 async function startUnlock(id) {
   if (!isVerified()) {
     openSheet("overlay-verifyPrompt");
-    return;
-  }
-  if (isPro()) {
-    await unlockJob(id);
-    renderJobs();
     return;
   }
   pendingUnlockId = id;
@@ -569,16 +581,18 @@ async function startUnlock(id) {
   openSheet("overlay-pay");
 }
 
-document.getElementById("payBtn").addEventListener("click", () => {
+document.getElementById("payBtn").addEventListener("click", async () => {
+  if (pendingUnlockId == null) return;
   const payBtn = document.getElementById("payBtn");
   payBtn.disabled = true;
-  payBtn.textContent = "Processing…";
-  setTimeout(async () => {
-    payBtn.textContent = "Paid ✓";
-    if (pendingUnlockId != null) await unlockJob(pendingUnlockId);
-    pendingUnlockId = null;
-    setTimeout(() => { closeSheet(); renderJobs(); }, 500);
-  }, 400);
+  payBtn.textContent = "Redirecting to Stripe…";
+  try {
+    await startStripeCheckout("/create-checkout-session", { listingId: pendingUnlockId });
+  } catch {
+    payBtn.disabled = false;
+    payBtn.textContent = "Pay £1.50";
+    alert("Couldn't start checkout — please try again in a moment.");
+  }
 });
 
 document.getElementById("verifyPromptBtn").addEventListener("click", () => {
@@ -586,7 +600,7 @@ document.getElementById("verifyPromptBtn").addEventListener("click", () => {
   goTo("verify");
 });
 
-/* ---------- Pro (demo subscription) ---------- */
+/* ---------- Pro subscription (real Stripe Checkout, recurring) ---------- */
 document.getElementById("goProBtn").addEventListener("click", () => {
   const btn = document.getElementById("proBtn");
   btn.disabled = false;
@@ -594,16 +608,41 @@ document.getElementById("goProBtn").addEventListener("click", () => {
   openSheet("overlay-pro");
 });
 
-document.getElementById("proBtn").addEventListener("click", () => {
+document.getElementById("proBtn").addEventListener("click", async () => {
   const btn = document.getElementById("proBtn");
   btn.disabled = true;
-  btn.textContent = "Processing…";
-  setTimeout(() => {
-    btn.textContent = "Subscribed ✓";
-    setPro(true);
-    setTimeout(() => { closeSheet(); renderJobs(); }, 500);
-  }, 400);
+  btn.textContent = "Redirecting to Stripe…";
+  try {
+    await startStripeCheckout("/create-subscription-session");
+  } catch {
+    btn.disabled = false;
+    btn.textContent = "Subscribe — £6.99/mo";
+    alert("Couldn't start checkout — please try again in a moment.");
+  }
 });
+
+/* Returning from Stripe Checkout — the page does a full reload at success_url/cancel_url,
+   so this just needs to run once at boot (see the init section at the bottom of this file). */
+function handleStripeReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const status = params.get("stripe");
+  if (!status) return;
+  const flow = params.get("flow");
+  history.replaceState(null, "", window.location.pathname);
+
+  if (status === "success" && flow === "pro") {
+    // Pro status is cached on scrapmanSession — refresh it so isPro() reflects the
+    // webhook's write (which usually lands before this redirect completes, but not
+    // guaranteed), then re-render whatever's currently showing it.
+    scrapmanRefreshSession().then(() => { renderAccount(); renderJobs(); });
+    alert("You're on ScrapMan Pro — every job's contact details are now visible.");
+  } else if (status === "success") {
+    setTimeout(renderJobs, 1500); // give the webhook a moment to land
+    alert("Payment received — the contact details are unlocked below.");
+  } else if (status === "cancel") {
+    alert("Checkout was cancelled — nothing was charged.");
+  }
+}
 
 /* ---------- verification (live-checked against the EA public register) ---------- */
 const VERIFY_ENDPOINT = "/verify-collector";
@@ -714,15 +753,25 @@ function renderAccount() {
 
   document.getElementById("accPro").innerHTML = isPro()
     ? `<div class="toggle-row">
-         <div><strong>ScrapMan Pro</strong><span>Unlimited contact unlocks — demo subscription</span></div>
-         <button class="add-btn" id="cancelProBtn">Cancel</button>
+         <div><strong>ScrapMan Pro</strong><span>Unlimited contact unlocks</span></div>
+         <button class="add-btn" id="manageProBtn">Manage subscription</button>
        </div>`
     : `<div class="toggle-row">
          <div><strong>Free plan</strong><span>&pound;1.50 per contact unlock</span></div>
          <button class="add-btn" id="accGoProBtn">Go Pro</button>
        </div>`;
-  const cancelBtn = document.getElementById("cancelProBtn");
-  if (cancelBtn) cancelBtn.addEventListener("click", () => { setPro(false); renderAccount(); renderJobs(); });
+  const manageBtn = document.getElementById("manageProBtn");
+  if (manageBtn) manageBtn.addEventListener("click", async () => {
+    manageBtn.disabled = true;
+    manageBtn.textContent = "Redirecting to Stripe…";
+    try {
+      await startStripeCheckout("/customer-portal");
+    } catch {
+      manageBtn.disabled = false;
+      manageBtn.textContent = "Manage subscription";
+      alert("Couldn't open the billing portal — please try again in a moment.");
+    }
+  });
   const goProBtn = document.getElementById("accGoProBtn");
   if (goProBtn) goProBtn.addEventListener("click", () => {
     const btn = document.getElementById("proBtn");
@@ -1109,6 +1158,7 @@ document.getElementById("listForm").addEventListener("submit", async e => {
 /* ---------- init ---------- */
 renderJobs();
 personalizeCouncilLink();
+handleStripeReturn();
 
 /* ---------- PWA service worker ---------- */
 if ("serviceWorker" in navigator) {

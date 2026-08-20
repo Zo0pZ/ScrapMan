@@ -16,7 +16,7 @@ const scrapmanDb = SCRAPMAN_AUTH_CONFIGURED && typeof supabase !== "undefined"
   ? supabase.createClient(window.SCRAPMAN_SUPABASE.url, window.SCRAPMAN_SUPABASE.anonKey)
   : null;
 
-/* session = { user, profile, collectorProfile } | null */
+/* session = { user, profile, collectorProfile, proSubscription } | null */
 let scrapmanSession = null;
 
 function scrapmanRole() {
@@ -30,11 +30,18 @@ function scrapmanEmitAuthChange() {
 async function scrapmanLoadProfile(user) {
   const { data: profile } = await scrapmanDb.from("profiles").select("*").eq("id", user.id).single();
   let collectorProfile = null;
+  let proSubscription = null;
   if (profile && profile.role === "collector") {
-    const { data } = await scrapmanDb.from("collector_profiles").select("*").eq("profile_id", user.id).single();
-    collectorProfile = data || null;
+    // Pro status is real now (see supabase/migrations/001_stripe_payments.sql) — only
+    // ever written by the verify-collector Node app's Stripe webhook handler.
+    const [{ data: cp }, { data: pro }] = await Promise.all([
+      scrapmanDb.from("collector_profiles").select("*").eq("profile_id", user.id).single(),
+      scrapmanDb.from("pro_subscriptions").select("*").eq("collector_id", user.id).single()
+    ]);
+    collectorProfile = cp || null;
+    proSubscription = pro || null;
   }
-  return { user, profile, collectorProfile };
+  return { user, profile, collectorProfile, proSubscription };
 }
 
 async function scrapmanRefreshSession() {

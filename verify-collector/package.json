@@ -2,12 +2,17 @@
   "name": "scrapman-verify-collector",
   "version": "1.0.0",
   "private": true,
-  "description": "Server-side proxy for the Environment Agency public register — checks a collector's waste carrier registration and Scrap Metal Dealers licence.",
+  "description": "Server-side proxy for the Environment Agency public register (collector verification) plus Stripe billing for job unlocks and Pro subscriptions.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "setup-stripe-products": "node scripts/setup-stripe-products.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "stripe": "^17.4.0"
   }
 }
