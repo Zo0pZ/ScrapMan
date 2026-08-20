@@ -15,6 +15,25 @@ const TYPE_ICON = {
   mixed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="10" width="9" height="9" rx="1.5"/><circle cx="16.5" cy="9.5" r="5"/></svg>'
 };
 
+/* ---------- collector dashboard assumptions ----------
+   Everything here is a clearly-labelled guide/estimate, not a measured per-job value —
+   the app doesn't record actual collected weight, fuel spend, or per-trip mileage. */
+const SCRAP_YARD_DISCOUNT = 0.35;        // guide price = LME spot x (1 - this); yards typically pay 20-50% below spot
+const WEIGHT_BAND_KG = { small: 15, medium: 60, large: 150 }; // rough midpoints for "car boot / trailer load / skip load"
+const AVG_MILES_SAVED_PER_CLUSTERED_JOB = 1.8; // typical saving the route optimiser finds vs point-to-point
+const VAN_MPG = 28;
+const FUEL_PRICE_PER_LITRE = 1.48;
+const CO2_KG_PER_MILE = 0.25; // light commercial van, UK average
+const BRASS_FRACTION_OF_COPPER = 0.72; // brass scrap isn't LME-traded; priced as a share of copper's value
+const STEEL_GUIDE_RATE_PER_KG = 0.15;  // steel scrap isn't LME-traded either; flat local guide rate
+
+const MATERIAL_FEED_ENDPOINT = "/verify-collector";
+const MATERIAL_PRICES_CACHE_KEY = "scrapman_metal_prices";
+const MATERIAL_PRICES_MAX_AGE = 24 * 60 * 60 * 1000; // 1 day, matches the server's own cache window
+
+// Fallback guide rates (GBP/kg) used only if the live feed can't be reached at all.
+const STATIC_MATERIAL_RATES = { copper: 6.20, aluminum: 1.55, zinc: 2.10, lead: 1.75 };
+
 /* ---------- helpers & state ---------- */
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => (
@@ -65,7 +84,10 @@ function goTo(screen) {
   if (screen === "jobs") { updateLocationUI(); setTimeout(initJobsMap, 0); ensureLocation().then(initJobsMap); renderActiveAssignment(); }
   if (screen === "route") { updateLocationUI(); setTimeout(renderRoute, 0); ensureLocation().then(renderRoute); }
   if (screen === "track") renderTrack();
-  if (screen === "home") personalizeCouncilLink();
+  if (screen === "home") {
+    personalizeCouncilLink();
+    if (scrapmanRole() === "collector") renderCollectorDashboard();
+  }
   if (screen === "list") prefillPostcodeFromLocation();
   if (screen === "messages") renderMessages();
   if (screen === "thread") renderThread();
@@ -216,6 +238,11 @@ window.addEventListener("scrapman:auth", () => {
   const onAuthScreen = document.getElementById("screen-auth").classList.contains("active");
   if (scrapmanSession && onAuthScreen) goTo("home");
   if (SCRAPMAN_AUTH_CONFIGURED && !scrapmanSession && !onAuthScreen) goTo("auth");
+  // Covers the case goTo("home") doesn't: a returning collector whose session loads
+  // asynchronously while the Home screen is already active from the static markup
+  // (see the "init" section further down, which can't know the role yet).
+  const onHomeScreen = document.getElementById("screen-home").classList.contains("active");
+  if (onHomeScreen && scrapmanRole() === "collector") renderCollectorDashboard();
 });
 
 /* ---------- bottom sheets ---------- */
@@ -1052,6 +1079,184 @@ async function renderRoute() {
   });
   L.polyline(latlngs, { color: "#ff6b00", weight: 3, dashArray: "6 6" }).addTo(routeMap);
   routeMap.fitBounds(latlngs, { padding: [24, 24] });
+}
+
+/* ---------- collector dashboard (Home screen, collector role) ---------- */
+
+async function fetchMetalPrices() {
+  const cached = loadJSON(MATERIAL_PRICES_CACHE_KEY, null);
+  if (cached && cached.ts && (Date.now() - cached.ts) < MATERIAL_PRICES_MAX_AGE) return cached.feed;
+
+  try {
+    const res = await fetch(`${MATERIAL_FEED_ENDPOINT}/metal-prices`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const feed = await res.json();
+    if (feed.live) saveJSON(MATERIAL_PRICES_CACHE_KEY, { feed, ts: Date.now() });
+    return feed;
+  } catch {
+    return { live: false, fetchedAt: null, rates: STATIC_MATERIAL_RATES };
+  }
+}
+
+// Brass and steel aren't LME-traded, so they're always shown as estimates — everything
+// else is only an estimate when the live feed couldn't be reached (see fetchMetalPrices).
+function buildMaterialRateTable(feed) {
+  const r = feed.rates || STATIC_MATERIAL_RATES;
+  const copper = r.copper ?? STATIC_MATERIAL_RATES.copper;
+  return [
+    { key: "copper", label: "Copper", ratePerKg: copper, estimated: !feed.live },
+    { key: "brass", label: "Brass", ratePerKg: copper * BRASS_FRACTION_OF_COPPER, estimated: true },
+    { key: "steel", label: "Heavy Steel", ratePerKg: STEEL_GUIDE_RATE_PER_KG, estimated: true },
+    { key: "aluminum", label: "Aluminium", ratePerKg: r.aluminum ?? STATIC_MATERIAL_RATES.aluminum, estimated: !feed.live },
+    { key: "zinc", label: "Zinc", ratePerKg: r.zinc ?? STATIC_MATERIAL_RATES.zinc, estimated: !feed.live },
+    { key: "lead", label: "Lead", ratePerKg: r.lead ?? STATIC_MATERIAL_RATES.lead, estimated: !feed.live }
+  ];
+}
+
+function renderMaterialFeed(feed) {
+  const table = buildMaterialRateTable(feed);
+  document.getElementById("materialFeed").innerHTML = table.map(m => `
+    <div class="material-tile ${m.estimated ? "estimated" : ""}">
+      <strong>&pound;${m.ratePerKg.toFixed(2)}/kg</strong>
+      <span class="material-name">${esc(m.label)}${m.estimated ? " (est.)" : ""}</span>
+    </div>
+  `).join("");
+  document.getElementById("materialFeedUpdated").textContent = feed.live
+    ? `LME spot &middot; ${new Date(feed.fetchedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+    : "Guide rates — live feed unavailable";
+  return table;
+}
+
+function rateForMetalType(type, table) {
+  const rate = key => { const m = table.find(x => x.key === key); return m ? m.ratePerKg : 0; };
+  if (type === "nonferrous") return rate("copper");
+  if (type === "ferrous" || type === "appliance") return rate("steel");
+  return (rate("copper") + rate("steel")) / 2; // mixed / unknown
+}
+
+async function fetchCollectorJobHistory() {
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return { all: [], lifetime: 0, thisWeek: 0, recent: [] };
+  const { data, error } = await scrapmanDb
+    .from("job_assignments")
+    .select("updated_at, listings(title, address, metal_type, weight_band)")
+    .eq("collector_id", scrapmanSession.user.id)
+    .eq("status", "completed")
+    .order("updated_at", { ascending: false });
+  if (error) { console.error(error); return { all: [], lifetime: 0, thisWeek: 0, recent: [] }; }
+  const all = data || [];
+
+  const startOfWeek = new Date();
+  const mondayOffset = (startOfWeek.getDay() + 6) % 7; // getDay(): Sun=0 ... Sat=6 -> Monday-indexed
+  startOfWeek.setHours(0, 0, 0, 0);
+  startOfWeek.setDate(startOfWeek.getDate() - mondayOffset);
+
+  return {
+    all,
+    lifetime: all.length,
+    thisWeek: all.filter(a => new Date(a.updated_at) >= startOfWeek).length,
+    recent: all.slice(0, 5)
+  };
+}
+
+function renderJobHistoryUI(history) {
+  document.getElementById("jobHistoryStats").innerHTML = `
+    <div class="stat-box"><strong>${history.lifetime}</strong><span>Total completed</span></div>
+    <div class="stat-box save"><strong>${history.thisWeek}</strong><span>This week</span></div>
+  `;
+  document.getElementById("jobHistoryList").innerHTML = history.recent.length
+    ? history.recent.map(r => {
+        const l = r.listings || {};
+        return `
+          <div class="job-card">
+            <span class="job-icon" aria-hidden="true">${TYPE_ICON[l.metal_type] || TYPE_ICON.mixed}</span>
+            <div class="job-body">
+              <h4>${esc(l.title || "Collection")}</h4>
+              <p class="job-meta">${esc(l.address || "")} &middot; collected ${new Date(r.updated_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</p>
+            </div>
+          </div>`;
+      }).join("")
+    : `<p class="job-meta">No completed collections yet — they'll show up here once you mark a job collected.</p>`;
+}
+
+// Fuel/CO2/revenue are all estimates — see the assumptions block near the top of this
+// file. mpg here means UK imperial miles-per-gallon (4.546 L/gal), matching everything
+// else in this app (£, UK postcodes, UK councils).
+function renderRoiTracker(history, table) {
+  const milesSaved = history.lifetime * AVG_MILES_SAVED_PER_CLUSTERED_JOB;
+  const fuelSaved = (milesSaved / VAN_MPG) * 4.546 * FUEL_PRICE_PER_LITRE;
+  const co2SavedKg = milesSaved * CO2_KG_PER_MILE;
+
+  const revenue = history.all.reduce((sum, a) => {
+    const l = a.listings || {};
+    const kg = WEIGHT_BAND_KG[l.weight_band] || WEIGHT_BAND_KG.medium;
+    const rate = rateForMetalType(l.metal_type, table) * (1 - SCRAP_YARD_DISCOUNT);
+    return sum + kg * rate;
+  }, 0);
+
+  document.getElementById("roiStats").innerHTML = `
+    <div class="stat-box save"><strong>&pound;${fuelSaved.toFixed(0)}</strong><span>Fuel saved</span></div>
+    <div class="stat-box save"><strong>&pound;${revenue.toFixed(0)}</strong><span>Revenue earned</span></div>
+    <div class="stat-box save"><strong>${co2SavedKg.toFixed(0)} kg</strong><span>CO&#8322; saved</span></div>
+  `;
+}
+
+let currentMaterialTable = [];
+
+function populateCalculatorMaterials(table) {
+  const select = document.getElementById("calcMaterial");
+  const prevValue = select.value;
+  select.innerHTML = table.map(m => `<option value="${m.key}">${esc(m.label)}${m.estimated ? " (est.)" : ""}</option>`).join("");
+  if (table.some(m => m.key === prevValue)) select.value = prevValue;
+}
+
+function recalcScrapCalculator(table) {
+  const weight = parseFloat(document.getElementById("calcWeight").value) || 0;
+  const material = table.find(m => m.key === document.getElementById("calcMaterial").value) || table[0];
+  const offer = material ? weight * material.ratePerKg * (1 - SCRAP_YARD_DISCOUNT) : 0;
+  document.getElementById("calcResult").textContent = `Estimated offer: £${offer.toFixed(2)}`;
+}
+
+/* These two survive re-renders the same way jobList's delegated listener does (see
+   above) — attached once here rather than re-attached every renderCollectorDashboard(). */
+document.getElementById("calcWeight").addEventListener("input", () => recalcScrapCalculator(currentMaterialTable));
+document.getElementById("calcMaterial").addEventListener("change", () => recalcScrapCalculator(currentMaterialTable));
+
+function renderComplianceBadge() {
+  const el = document.getElementById("complianceBadge");
+  const c = getCollector();
+  if (!c) { el.innerHTML = `<p class="job-meta">Sign in to see your compliance status.</p>`; return; }
+
+  if (c.status === "verified") {
+    const carrierExpiry = c.eaCarrier && c.eaCarrier.expiryDate;
+    const licenceExpiry = c.eaScrapMetalLicence && c.eaScrapMetalLicence.expiryDate;
+    el.innerHTML = `
+      <div class="toggle-row">
+        <div><strong>${esc(c.businessName || "Collector")}</strong><span>Waste carrier registration &mdash; valid</span></div>
+        <span class="badge-verified">&#10003; Verified</span>
+      </div>
+      <p class="demo-note status-ok">Carrier reg ${esc(c.carrierRef || "—")}${carrierExpiry ? ` &middot; expires ${esc(carrierExpiry)}` : ""}${c.smdCouncil ? ` &middot; ${esc(c.smdCouncil)} SMD licence ${esc(c.smdLicence || "—")}${licenceExpiry ? ` (expires ${esc(licenceExpiry)})` : ""}` : ""}.</p>
+    `;
+  } else {
+    el.innerHTML = `
+      <div class="toggle-row">
+        <div><strong>Not yet verified</strong><span>Homeowners can't see your contact details until you're verified.</span></div>
+        <button class="add-btn" id="dashVerifyBtn">Get verified</button>
+      </div>
+    `;
+    document.getElementById("dashVerifyBtn").addEventListener("click", () => goTo("verify"));
+  }
+}
+
+async function renderCollectorDashboard() {
+  renderComplianceBadge();
+
+  const [feed, history] = await Promise.all([fetchMetalPrices(), fetchCollectorJobHistory()]);
+  currentMaterialTable = renderMaterialFeed(feed);
+  populateCalculatorMaterials(currentMaterialTable);
+  recalcScrapCalculator(currentMaterialTable);
+
+  renderJobHistoryUI(history);
+  renderRoiTracker(history, currentMaterialTable);
 }
 
 /* ---------- list scrap form ---------- */

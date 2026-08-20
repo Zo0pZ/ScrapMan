@@ -607,6 +607,50 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
   white-space: nowrap;
 }
 
+/* COLLECTOR DASHBOARD */
+.collector-dashboard { display: flex; flex-direction: column; gap: 22px; margin-top: 8px; }
+.dash-section { display: flex; flex-direction: column; gap: 10px; }
+.dash-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.dash-title { margin: 0; font-size: 1rem; font-family: var(--font-display); }
+.dash-sub { font-size: 0.72rem; color: var(--color-muted-foreground); white-space: nowrap; }
+
+.material-feed {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.material-feed::-webkit-scrollbar { display: none; }
+.material-tile {
+  flex: 0 0 auto;
+  min-width: 108px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 12px;
+  text-align: center;
+}
+.material-tile strong { display: block; font-size: 1.05rem; font-family: var(--font-display); font-variant-numeric: tabular-nums; color: var(--color-positive-dark); }
+.material-tile span { display: block; font-size: 0.72rem; color: var(--color-muted-foreground); margin-top: 2px; }
+.material-tile .material-name { font-size: 0.78rem; font-weight: 700; color: var(--color-foreground); margin-top: 4px; }
+.material-tile.estimated strong { color: var(--color-muted-foreground); }
+
+.job-history-list { display: flex; flex-direction: column; gap: 8px; }
+.job-history-list .empty-state { padding: 24px 16px; }
+
+.calculator-card .calc-result {
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-positive-dark);
+}
+
+.compliance-badge { display: flex; flex-direction: column; gap: 6px; }
+.compliance-badge .toggle-row + .demo-note { margin-top: 2px; }
+
 /* ACCOUNT */
 .account-card {
   background: var(--color-surface);

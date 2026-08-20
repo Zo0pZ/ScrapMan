@@ -141,7 +141,55 @@
         <button class="cta cta-dark" data-nav="jobs" data-role="collector">I collect scrap for a living</button>
       </div>
 
-      <div class="how-strip">
+      <!-- COLLECTOR SUBSCRIBER DASHBOARD -->
+      <div class="collector-dashboard" data-role="collector" id="collectorDashboard">
+
+        <section class="dash-section" id="materialFeedSection">
+          <div class="dash-section-head">
+            <h2 class="dash-title">Live material prices</h2>
+            <span class="dash-sub" id="materialFeedUpdated">Loading&hellip;</span>
+          </div>
+          <div class="material-feed" id="materialFeed"></div>
+          <p class="demo-note">Copper, Aluminium, Zinc &amp; Lead are live LME spot prices. Brass &amp; Heavy Steel aren't exchange-traded, so they're estimated. Scrap yards typically pay 20&ndash;50% below spot &mdash; that discount is what the ROI tracker and calculator below use.</p>
+        </section>
+
+        <section class="dash-section" id="jobHistorySection">
+          <h2 class="dash-title">Your activity</h2>
+          <div class="route-stats" id="jobHistoryStats"></div>
+          <div class="job-history-list" id="jobHistoryList"></div>
+        </section>
+
+        <section class="dash-section" id="roiSection">
+          <h2 class="dash-title">App savings &amp; ROI</h2>
+          <div class="route-stats" id="roiStats"></div>
+          <p class="demo-note" id="roiNote">Estimated from your completed jobs and typical route savings &mdash; not measured per job.</p>
+        </section>
+
+        <button class="cta cta-dark full-width" id="planRouteBtn" data-nav="route">Plan today's route</button>
+
+        <section class="dash-section" id="calculatorSection">
+          <h2 class="dash-title">Quick scrap calculator</h2>
+          <div class="account-card calculator-card">
+            <label class="field">
+              <span>Weight (kg)</span>
+              <input type="number" id="calcWeight" min="0" step="0.1" placeholder="e.g. 25">
+            </label>
+            <label class="field">
+              <span>Material</span>
+              <select id="calcMaterial"></select>
+            </label>
+            <div class="calc-result" id="calcResult">Estimated offer: &pound;0.00</div>
+          </div>
+        </section>
+
+        <section class="dash-section" id="complianceSection">
+          <h2 class="dash-title">Compliance</h2>
+          <div class="account-card compliance-badge" id="complianceBadge"></div>
+        </section>
+
+      </div>
+
+      <div class="how-strip" data-role="homeowner">
         <h2 class="how-title">How it works</h2>
         <ol class="how-steps">
           <li><span class="stop-num">1</span> Snap a photo &amp; drop your postcode</li>
@@ -150,7 +198,7 @@
         </ol>
       </div>
 
-      <div class="value-props">
+      <div class="value-props" data-role="homeowner">
         <div class="value-card">
           <span class="vc-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
@@ -174,8 +222,8 @@
         </div>
       </div>
 
-      <button class="link-btn" data-nav="pricing">See pricing &rarr;</button>
-      <div class="council-row">
+      <button class="link-btn" data-nav="pricing" data-role="homeowner">See pricing &rarr;</button>
+      <div class="council-row" data-role="homeowner">
         <a class="link-btn council-link" href="https://www.gov.uk/find-local-council" target="_blank" rel="noopener" id="councilLink">Compare your council's bulky waste charges &rarr;</a>
         <button type="button" class="locate-btn" id="locateCouncilBtn" aria-label="Use my location to find my council">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>

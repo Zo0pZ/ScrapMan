@@ -1,4 +1,4 @@
-/* ScrapMan — small cPanel Node.js App that does two unrelated jobs:
+/* ScrapMan — small cPanel Node.js App that does three unrelated jobs:
  *
  *   1. Collector verification proxy (original purpose — see checkCarrierRegistration /
  *      checkScrapMetalLicence below). Browsers can't call environment.data.gov.uk
@@ -9,6 +9,10 @@
  *      subscription. Stripe's secret key and Supabase's service_role key can only
  *      ever live server-side, so checkout-session creation, the webhook, and the
  *      customer-portal link all live here too rather than duplicating this app.
+ *
+ *   3. Collector dashboard material prices (see fetchLiveMetalPrices/handleMetalPrices
+ *      below) — proxies metals.dev so its API key never reaches the browser, and
+ *      caches the result for a day.
  *
  * IMPORTANT (verification): "verified" is only ever set from an *exact*
  * registrationNumber match against a record returned by the EA. Fuzzy/prefix search
@@ -29,7 +33,7 @@
  * Env vars (set via the cPanel Node App UI, or a local .env for `stripe listen` /
  * manual testing — see .env.example): SUPABASE_URL, SUPABASE_ANON_KEY,
  * SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
- * STRIPE_PRICE_UNLOCK, STRIPE_PRICE_PRO, DOMAIN, PORT.
+ * STRIPE_PRICE_UNLOCK, STRIPE_PRICE_PRO, METALS_DEV_API_KEY, DOMAIN, PORT.
  *
  * Routing note: cPanel's Node app proxy may or may not strip the mount path
  * (e.g. "/verify-collector") before it reaches this process, so every route below
@@ -46,6 +50,9 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 const PRO_BASE = "https://environment.data.gov.uk/public-register";
 const COUNCIL_SUFFIXES = /\s*(city|metropolitan|borough|district|unitary|county)?\s*council\s*$/i;
+
+const METALS_API_BASE = "https://api.metals.dev/v1";
+const METAL_PRICE_CACHE_MS = 24 * 60 * 60 * 1000; // 1 day — matches the "updated daily" the dashboard promises
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -165,6 +172,59 @@ async function handleVerify(req, res, params) {
       error: "Couldn't reach the Environment Agency register — try again shortly.",
       detail: String(err.message || err)
     });
+  }
+}
+
+/* ---------- Collector dashboard: live scrap metal prices ----------
+ * Copper/aluminium/zinc/lead spot prices (GBP/kg) via metals.dev — LME data. The API
+ * key must never reach the browser (same reasoning as STRIPE_SECRET_KEY above), so this
+ * proxies it server-side and caches the result for a day rather than calling metals.dev
+ * on every dashboard load. Brass and heavy steel aren't LME-traded commodities, so the
+ * client derives guide prices for those from what this endpoint returns instead of
+ * expecting them here. */
+let metalPriceCache = null; // { rates, fetchedAt } | null
+
+async function fetchLiveMetalPrices() {
+  const apiKey = process.env.METALS_DEV_API_KEY;
+  if (!apiKey) throw new Error("METALS_DEV_API_KEY not configured");
+
+  const url = `${METALS_API_BASE}/latest?api_key=${encodeURIComponent(apiKey)}&currency=GBP&unit=kg`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`metals.dev responded ${res.status}`);
+  const body = await res.json();
+  if (body.status && body.status !== "success") throw new Error(body.error_message || "metals.dev returned an error");
+
+  const metals = body.metals || body.rates || {};
+  const rates = {
+    copper: Number(metals.copper),
+    aluminum: Number(metals.aluminum),
+    zinc: Number(metals.zinc),
+    lead: Number(metals.lead)
+  };
+  if (Object.values(rates).some(v => !Number.isFinite(v))) {
+    throw new Error("Unexpected metals.dev response shape");
+  }
+  return rates;
+}
+
+async function handleMetalPrices(req, res) {
+  const now = Date.now();
+  if (metalPriceCache && (now - metalPriceCache.fetchedAt) < METAL_PRICE_CACHE_MS) {
+    return sendJSON(res, 200, { live: true, fetchedAt: new Date(metalPriceCache.fetchedAt).toISOString(), rates: metalPriceCache.rates });
+  }
+  try {
+    const rates = await fetchLiveMetalPrices();
+    metalPriceCache = { rates, fetchedAt: now };
+    return sendJSON(res, 200, { live: true, fetchedAt: new Date(now).toISOString(), rates });
+  } catch (err) {
+    console.error("metal-prices fetch failed:", err.message || err);
+    // A stale cached price is still more useful than none — only give up entirely
+    // (and let the client fall back to its own static guide rates) if we've never
+    // had a successful fetch at all.
+    if (metalPriceCache) {
+      return sendJSON(res, 200, { live: true, fetchedAt: new Date(metalPriceCache.fetchedAt).toISOString(), rates: metalPriceCache.rates, stale: true });
+    }
+    return sendJSON(res, 200, { live: false, fetchedAt: null, rates: null });
   }
 }
 
@@ -408,6 +468,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
+    if (req.method === "GET" && endsWithPath(pathname, "/metal-prices")) {
+      return await handleMetalPrices(req, res);
+    }
     if (req.method === "POST" && endsWithPath(pathname, "/create-checkout-session")) {
       return await handleCreateUnlockSession(req, res, await readJSONBody(req));
     }
