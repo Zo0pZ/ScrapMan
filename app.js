@@ -107,12 +107,27 @@ function goTo(screen) {
 }
 
 document.querySelectorAll("[data-nav]").forEach(el => {
-  el.addEventListener("click", () => goTo(el.dataset.nav));
+  el.addEventListener("click", () => {
+    // Signed-out visitors get bounced to the auth screen by goTo() below — if the
+    // element they clicked was itself role-specific (e.g. "Get my scrap collected" vs
+    // "I collect scrap for a living" on the Home screen), carry that choice over so
+    // the right pill is already selected on the register form instead of defaulting
+    // back to homeowner.
+    if (el.dataset.role === "homeowner" || el.dataset.role === "collector") {
+      setAuthRoleChoice(el.dataset.role);
+    }
+    goTo(el.dataset.nav);
+  });
 });
 
 /* ---------- auth (accounts, gated entirely by SCRAPMAN_AUTH_CONFIGURED) ---------- */
 let authMode = "signup";
 let authRoleChoice = "homeowner";
+
+function setAuthRoleChoice(role) {
+  authRoleChoice = role;
+  document.querySelectorAll("#authRoleGroup .pill").forEach(p => p.classList.toggle("active", p.dataset.roleChoice === role));
+}
 
 function applyAuthMode() {
   const isSignup = authMode === "signup";
@@ -136,9 +151,7 @@ document.getElementById("authToggleMode").addEventListener("click", () => {
 document.getElementById("authRoleGroup").addEventListener("click", e => {
   const pill = e.target.closest(".pill");
   if (!pill) return;
-  document.querySelectorAll("#authRoleGroup .pill").forEach(p => p.classList.remove("active"));
-  pill.classList.add("active");
-  authRoleChoice = pill.dataset.roleChoice;
+  setAuthRoleChoice(pill.dataset.roleChoice);
 });
 
 document.getElementById("authForm").addEventListener("submit", async e => {
