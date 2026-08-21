@@ -40,6 +40,13 @@
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-display: "Space Grotesk", var(--font-sans);
   --transition: 180ms ease;
+
+  /* z-index scale — deliberately below/above bands, not arbitrary numbers per layer.
+     --z-overlay must clear Leaflet's own internal panes/controls (its own CSS goes up
+     to z-index:1000 for .leaflet-top/.leaflet-bottom controls), or a map on the page
+     behind a bottom sheet/modal can render on top of it. */
+  --z-sticky: 10;     /* app header, top nav bar */
+  --z-overlay: 2000;  /* bottom sheets / centered modals */
 }
 
 /* Dynamic dark mode — tuned for outdoor / bright-sunlight readability */
@@ -146,7 +153,7 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
   color: #fff;
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: var(--z-sticky);
 }
 .brand { display: flex; align-items: center; gap: 8px; }
 .brand-mark { width: 48px; height: 48px; }
@@ -680,7 +687,7 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
 
 /* OVERLAY + SHEET */
 .overlay {
-  position: fixed; inset: 0; z-index: 50;
+  position: fixed; inset: 0; z-index: var(--z-overlay);
   background: rgba(9, 11, 13, 0.6);
   -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
   display: none; align-items: flex-end; justify-content: center;
