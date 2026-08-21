@@ -101,21 +101,31 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
   border-radius: 4px;
 }
 
+/* App shell — mobile default (<600px): header/main/bottom-tab-bar stacked, capped at
+   phone width. Tablet (600–1023px) and desktop (≥1024px) widen the shell and move the
+   tab bar from "tabbar" (last row) to between header and main — see the RESPONSIVE
+   section near the end of this file for the breakpoint rules themselves. Using
+   grid-area (not flex + DOM reordering) means index.html's header/main/nav order never
+   has to change, only where each piece of it visually renders. */
 .app-shell {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100vh;
   background: var(--color-background);
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  /* minmax(0, 1fr), not the implicit "auto" a bare 1-column grid would default to —
+     an auto track sizes to its content's max-content width, and max-content for text
+     is its *unwrapped* width, which would blow the whole shell out to however wide the
+     hero heading is on one line instead of letting it wrap at the viewport edge. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas: "header" "main" "tabbar";
   position: relative;
   box-shadow: var(--shadow);
 }
-
-@media (min-width: 540px) {
-  body { padding: 24px 0; }
-  .app-shell { min-height: 90vh; border-radius: 28px; overflow: hidden; }
-}
+.app-header { grid-area: header; }
+.screens { grid-area: main; }
+.tab-bar { grid-area: tabbar; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -565,7 +575,10 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
 @keyframes sheetUp { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @media (min-width: 600px) {
   .overlay { align-items: center; padding: 24px; }
-  .sheet { border-radius: var(--radius-lg); max-width: 400px; }
+  .sheet { border-radius: var(--radius-lg); max-width: 440px; }
+  /* The drag handle is a mobile bottom-sheet affordance ("swipe to dismiss") —
+     on a centered desktop modal there's nothing to drag, so it's just clutter. */
+  .sheet-handle { display: none; }
 }
 .sheet-handle { width: 40px; height: 4px; border-radius: 999px; background: var(--color-border); align-self: center; }
 .sheet h3 { margin: 0; font-size: 1.15rem; }
@@ -723,6 +736,172 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
 
 /* IOS INSTALL STEPS */
 .ios-steps { margin: 4px 0; }
+
+/* ============================================================
+   RESPONSIVE — mobile default (this file, above), tablet 600–1023px,
+   desktop ≥1024px. Every rule below reflows layout at each breakpoint
+   (nav position, column count, content width) rather than scaling or
+   letterboxing the same phone-width design. All of it is pure CSS —
+   grid-area reassigns EXISTING elements by id/class instead of adding
+   wrapper markup, so index.html and goTo()'s data-nav routing in app.js
+   are untouched; only where things render changes, not what fires when
+   clicked. Card grids that don't need a fixed structure (value props,
+   pricing) use `repeat(auto-fit, minmax(...))` instead of hard
+   breakpoints, so they scale smoothly rather than jumping at one width.
+   ============================================================ */
+
+/* ---- tablet+: shell widens, tab bar moves from bottom to a top bar ---- */
+@media (min-width: 600px) {
+  body { padding: 0; background: var(--color-background); }
+  .app-shell {
+    max-width: 900px;
+    min-height: 100vh;
+    border-radius: 0;
+    box-shadow: none;
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas: "header" "tabbar" "main";
+  }
+
+  .tab-bar {
+    position: static;
+    display: flex;
+    justify-content: center;
+    gap: 2px;
+    padding: 0 12px;
+    background: var(--color-primary-dark);
+    border-top: none;
+  }
+  .tab {
+    flex: 0 0 auto;
+    flex-direction: row;
+    gap: 8px;
+    padding: 14px 16px;
+    min-height: 48px;
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.62);
+    border-radius: 0;
+  }
+  .tab svg { width: 18px; height: 18px; }
+  .tab:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+  .tab.active { color: #fff; background: transparent; box-shadow: inset 0 -3px 0 var(--color-accent); }
+  .tab:focus-visible { outline-offset: -3px; }
+
+  .screens { padding: 28px 32px 60px; }
+
+  /* Form-like / conversational screens read best at a constrained width, not
+     stretched edge-to-edge across the wider shell. */
+  #screen-auth, #screen-reset-password, #screen-list, #screen-verify,
+  #screen-account, #screen-messages, #screen-thread {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  /* Card groups that don't need a fixed structure — auto-fit scales the column
+     count to available width with no extra breakpoint of its own.
+     #screen-pricing.active (not a bare #screen-pricing): a bare ID selector's
+     specificity beats .screen.active { display: block }, which would leave
+     Pricing visibly rendered even while some other screen is the active one —
+     scoping to .active keeps this display:grid conditional on the same class
+     goTo() already toggles. */
+  .value-props { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 20px; align-items: start; }
+  #screen-pricing.active { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px 14px; align-items: start; }
+  #screen-pricing > .screen-title, #screen-pricing > .screen-sub, #screen-pricing > .extras { grid-column: 1 / -1; }
+
+  .material-feed { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); overflow-x: visible; }
+
+  /* Home: hero text + CTA buttons side by side; everything else (install
+     banner, collector dashboard, how-it-works, value props) stays full width
+     below — grid-area placement keeps this working regardless of the install
+     banner's position in the DOM (it's conditionally shown by app.js).
+     #screen-home.active for the same reason as #screen-pricing.active above —
+     a bare ID selector would outrank .screen{display:none} and leave Home
+     rendered underneath whatever screen is actually active. */
+  #screen-home.active {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    column-gap: 32px;
+    align-items: center;
+    grid-template-areas:
+      "hero cta"
+      "banner banner"
+      "dash dash"
+      "how how"
+      "values values";
+  }
+  #screen-home > .hero { grid-area: hero; }
+  #screen-home > .cta-row { grid-area: cta; align-self: center; }
+  #screen-home > .install-banner { grid-area: banner; }
+  #screen-home > .collector-dashboard { grid-area: dash; }
+  #screen-home > .how-strip { grid-area: how; }
+  #screen-home > .value-props { grid-area: values; }
+  #screen-home > .hero { padding: 0; }
+  .hero-sub { max-width: 52ch; }
+  .cta-row { margin-bottom: 0; }
+
+  /* Collector dashboard: activity + ROI stat-boxes sit side by side; the
+     material feed, route button and calculator stay full width. */
+  #collectorDashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  #materialFeedSection, #planRouteBtn, #calculatorSection { grid-column: 1 / -1; }
+
+  /* Job/listing card grids scale up naturally wherever there's room —
+     Jobs' list column stays single-file next to its map (not enough width
+     for two), My-listings' full-width history list gets multiple columns. */
+  .job-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; align-items: start; }
+}
+
+/* ---- desktop: shell widens further, list screens go side-by-side with their map ---- */
+@media (min-width: 1024px) {
+  .app-shell { max-width: 1280px; }
+  .screens { padding: 32px 40px 60px; }
+
+  /* Jobs: map pinned in a fixed-ish column, job list fills the rest.
+     grid-area reassigns the section's existing children directly — no
+     wrapper div needed. #screen-jobs.active for the same reason as
+     #screen-home.active/#screen-pricing.active above (see that comment). */
+  #screen-jobs.active {
+    display: grid;
+    grid-template-columns: minmax(320px, 420px) 1fr;
+    column-gap: 24px;
+    align-items: start;
+  }
+  #screen-jobs > .screen-title,
+  #screen-jobs > .screen-sub,
+  #screen-jobs > .location-row,
+  #screen-jobs > #activeAssignmentCard,
+  #screen-jobs > .filter-row { grid-column: 1 / -1; }
+  #screen-jobs > .mini-map { position: sticky; top: 16px; height: 480px; }
+
+  /* Route: routeContent already groups location-row/map/stats/list together —
+     grid it directly, same map+detail split as Jobs. */
+  #routeContent {
+    display: grid;
+    grid-template-columns: minmax(320px, 420px) 1fr;
+    column-gap: 24px;
+    grid-template-areas: "loc loc" "map stats" "map list";
+  }
+  #routeLocationRow { grid-area: loc; }
+  #routeMap { grid-area: map; position: sticky; top: 16px; height: 480px; align-self: start; }
+  #routeStats { grid-area: stats; }
+  #routeList { grid-area: list; }
+
+  /* My listings: active-tracking map + collector card side by side, same
+     pattern as Route/Jobs above but simpler (only two children). */
+  #trackContent { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; align-items: start; }
+  #trackMap { height: 100% !important; min-height: 320px; }
+
+  #screen-home { grid-template-columns: 1.5fr 1fr; column-gap: 48px; }
+  .hero h1 { font-size: clamp(2.2rem, 4vw, 2.9rem); }
+}
+
+/* ---- overlays: fully centered modals on tablet/desktop (motion only here —
+   sizing/radius/handle already handled in the OVERLAY + SHEET section above;
+   centering itself already worked since .overlay is position:fixed,
+   unconstrained by .app-shell). A modal reads as arriving, not sliding up from
+   an edge, so it gets its own entrance instead of the mobile sheetUp keyframe. ---- */
+@media (min-width: 600px) {
+  .sheet { animation: modalIn 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+  @keyframes modalIn { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+}
 
 /* COUNCIL PAGES (body.page) */
 body.page { background: var(--color-background); padding: 0; }
