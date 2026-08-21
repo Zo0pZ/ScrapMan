@@ -148,7 +148,7 @@
 
       <div class="cta-row">
         <button class="cta cta-primary" data-nav="list" data-role="homeowner" data-public>Get my scrap collected</button>
-        <button class="cta cta-dark" data-nav="jobs" data-role="collector" data-public>I collect scrap for a living</button>
+        <button class="cta cta-dark" data-nav="jobs" data-role="collector" data-public>Find jobs near me</button>
       </div>
 
       <!-- COLLECTOR SUBSCRIBER DASHBOARD -->
@@ -227,8 +227,48 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v6c0 4.4 3.2 7.6 7.5 9 4.3-1.4 7.5-4.6 7.5-9V6L12 3Z"/><path d="m9 12 2 2 4-4"/></svg>
           </span>
           <h3>Vetted collectors</h3>
-          <p>Badge-checked scrap men with ratings on every job, so you know who's knocking.</p>
+          <p>Every collector's waste carrier licence is checked live against the Environment Agency register before they can see your address.</p>
         </div>
+      </div>
+
+      <div class="repeat-cta" data-role="homeowner" data-public>
+        <p>Got something taking up space?</p>
+        <button class="cta cta-primary full-width" data-nav="list" data-role="homeowner" data-public>Get my scrap collected</button>
+      </div>
+
+      <div class="home-faq" data-role="homeowner" data-public>
+        <h2 class="how-title">Common questions</h2>
+        <details class="faq-item">
+          <summary>Is it really free?</summary>
+          <p>Yes, always. Homeowners never pay to list or to have scrap collected. Collectors cover a small fee per job, or a monthly plan.</p>
+        </details>
+        <details class="faq-item">
+          <summary>What happens after I list something?</summary>
+          <p>Local collectors see your listing straight away. Once one accepts, you can track them and message them directly from the app.</p>
+        </details>
+        <details class="faq-item">
+          <summary>How fast will someone come?</summary>
+          <p>It depends on demand nearby &mdash; flag a listing &ldquo;Today if possible&rdquo; for extra urgency, or &ldquo;No rush&rdquo; if timing doesn't matter.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Is my address safe?</summary>
+          <p>Your exact address is never shared until a licence-checked collector accepts the job. Until then, collectors only see roughly where you are.</p>
+        </details>
+      </div>
+
+      <!-- Pre-signup collector pitch — data-public (unlike #collectorDashboard/the
+           collector .hero above, which only ever show once actually signed in), since
+           the whole point is giving a prospective collector something to read before
+           they commit to signing up, not just a single button label. -->
+      <div class="collector-teaser" data-role="collector" data-public>
+        <h2 class="how-title">For collectors</h2>
+        <ol class="how-steps">
+          <li><span class="stop-num">1</span> Browse verified listings near you</li>
+          <li><span class="stop-num">2</span> Unlock the ones worth your time</li>
+          <li><span class="stop-num">3</span> Route planning cuts the driving between stops</li>
+        </ol>
+        <p class="hero-sub">No cold-calling, no guesswork on what's actually there.</p>
+        <button class="cta cta-dark full-width" data-nav="jobs" data-role="collector" data-public>Find jobs near me</button>
       </div>
 
     </section>

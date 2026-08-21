@@ -229,6 +229,51 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
 .value-card h3 { margin: 10px 0 4px; font-size: 1rem; }
 .value-card p { margin: 0; color: var(--color-muted-foreground); font-size: 0.88rem; line-height: 1.45; }
 
+/* REPEAT CTA (Home, after the value props — gives a scrolled-past visitor a second
+   prompt instead of making them scroll back to the top one) */
+.repeat-cta { text-align: center; margin-bottom: 24px; }
+.repeat-cta p { margin: 0 0 10px; font-weight: 700; color: var(--color-foreground); }
+
+/* HOME FAQ — native <details>/<summary>, no JS needed for the expand/collapse */
+.home-faq { margin-bottom: 24px; }
+.faq-item {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 8px;
+}
+.faq-item summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.92rem;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after {
+  content: "+";
+  font-size: 1.2rem;
+  font-weight: 400;
+  color: var(--color-accent-dark);
+  flex-shrink: 0;
+  transition: transform var(--transition);
+}
+.faq-item[open] summary::after { transform: rotate(45deg); }
+.faq-item p { margin: 10px 0 0; color: var(--color-muted-foreground); font-size: 0.88rem; line-height: 1.5; }
+
+/* COLLECTOR TEASER (Home, pre-signup pitch for collectors — see index.html comment) */
+.collector-teaser { margin-bottom: 20px; }
+/* data-public keeps this visible while the role is still unknown (signed out) — but
+   once someone IS a confirmed, signed-in collector, #collectorDashboard is showing
+   (its own .hidden is removed) and this pre-signup pitch is redundant next to the
+   real thing. */
+#collectorDashboard:not(.hidden) ~ .collector-teaser { display: none; }
+.collector-teaser .hero-sub { margin: 14px 0 16px; }
+
 .link-btn {
   background: none; border: none; color: var(--color-foreground); font-weight: 700;
   padding: 10px 0; font-size: 0.95rem; text-decoration: underline;
@@ -826,7 +871,10 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
       "banner banner"
       "dash dash"
       "how how"
-      "values values";
+      "values values"
+      "repeat repeat"
+      "faq faq"
+      "collectors collectors";
   }
   #screen-home > .hero { grid-area: hero; }
   #screen-home > .cta-row { grid-area: cta; align-self: center; }
@@ -834,6 +882,9 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
   #screen-home > .collector-dashboard { grid-area: dash; }
   #screen-home > .how-strip { grid-area: how; }
   #screen-home > .value-props { grid-area: values; }
+  #screen-home > .repeat-cta { grid-area: repeat; }
+  #screen-home > .home-faq { grid-area: faq; }
+  #screen-home > .collector-teaser { grid-area: collectors; }
   #screen-home > .hero { padding: 0; }
   .hero-sub { max-width: 52ch; }
   .cta-row { margin-bottom: 0; }

@@ -117,11 +117,11 @@ function goTo(screen) {
 
 document.querySelectorAll("[data-nav]").forEach(el => {
   el.addEventListener("click", () => {
-    // Signed-out visitors get bounced to the auth screen by goTo() below — if the
+    // Most screens bounce a signed-out visitor to the auth screen by goTo() below
+    // (Home/Pricing are the exceptions — see PUBLIC_SCREENS_SIGNED_OUT) — if the
     // element they clicked was itself role-specific (e.g. "Get my scrap collected" vs
-    // "I collect scrap for a living" on the Home screen), carry that choice over so
-    // the right pill is already selected on the register form instead of defaulting
-    // back to homeowner.
+    // "Find jobs near me"), carry that choice over so the right pill is already
+    // selected on the register form instead of defaulting back to homeowner.
     if (el.dataset.role === "homeowner" || el.dataset.role === "collector") {
       setAuthRoleChoice(el.dataset.role);
     }
