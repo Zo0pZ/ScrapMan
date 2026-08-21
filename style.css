@@ -1001,6 +1001,9 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
   .app-shell { max-width: 1280px; }
   .screens { padding: 32px 40px 60px; }
 
+  .brand-mark { width: 100px; height: 100px; }
+  .brand-name { font-size: 3.15rem; }
+
   /* Jobs: map pinned in a fixed-ish column, job list fills the rest.
      grid-area reassigns the section's existing children directly — no
      wrapper div needed. #screen-jobs.active for the same reason as
