@@ -280,6 +280,21 @@ create policy "collectors update their own assignments"
   using (auth.uid() = collector_id)
   with check (auth.uid() = collector_id);
 
+-- Second, PERMISSIVE update policy (Postgres RLS ORs multiple permissive policies for
+-- the same command together) — lets a homeowner confirm their own listing was
+-- collected even if the collector never taps "Mark collected" themselves. Deliberately
+-- narrow: the with check clause only ever allows the resulting status to be
+-- 'completed', never en_route/arrived/weighed/cancelled — those stay collector-only.
+create policy "homeowners can mark their own listing collected"
+  on job_assignments for update
+  using (
+    exists (select 1 from listings l where l.id = listing_id and l.homeowner_id = auth.uid())
+  )
+  with check (
+    status = 'completed'
+    and exists (select 1 from listings l where l.id = listing_id and l.homeowner_id = auth.uid())
+  );
+
 -- Keep listings.status in sync with its assignment
 create function public.sync_listing_status()
 returns trigger as $$

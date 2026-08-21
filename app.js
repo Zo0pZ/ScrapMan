@@ -636,6 +636,14 @@ function renderMyListingsList(listings, myRatings) {
       actionHTML = l.is_boosted
         ? `<span class="tag boosted-tag">&#128640; Boosted</span>`
         : `<button class="add-btn" data-boost="${l.id}">Boost &mdash; &pound;1.99</button>`;
+    } else if (label === "Scheduled" && assignment) {
+      // Normally the collector taps "Mark collected" themselves once they've done the
+      // job — this is the homeowner's own fallback for when that doesn't happen (easy
+      // to forget when you're not looking at the app), so their listing doesn't stay
+      // stuck at "Scheduled" forever with no way to rate the collector afterwards.
+      const collectorName = (assignment.profiles && assignment.profiles.display_name) || "your collector";
+      metaExtra = ` &middot; ${esc(collectorName)}`;
+      actionHTML = `<button class="add-btn" data-mark-collected="${assignment.id}">Mark as collected</button>`;
     } else if (label === "Collected" && assignment) {
       const collectorName = (assignment.profiles && assignment.profiles.display_name) || "your collector";
       metaExtra = ` &middot; by ${esc(collectorName)}`;
@@ -673,8 +681,25 @@ document.getElementById("myListingsList").addEventListener("click", e => {
   const rateBtn = e.target.closest("[data-rate]");
   if (rateBtn) {
     startRating(Number(rateBtn.dataset.rate), rateBtn.dataset.collectorId, rateBtn.dataset.collectorName);
+    return;
   }
+  const markCollectedBtn = e.target.closest("[data-mark-collected]");
+  if (markCollectedBtn) markListingCollected(Number(markCollectedBtn.dataset.markCollected), markCollectedBtn);
 });
+
+async function markListingCollected(assignmentId, btn) {
+  btn.disabled = true;
+  btn.textContent = "Marking as collected…";
+  const { error } = await scrapmanDb.from("job_assignments").update({ status: "completed" }).eq("id", assignmentId);
+  if (error) {
+    btn.disabled = false;
+    btn.textContent = "Mark as collected";
+    alert("Couldn't update this listing — please try again.");
+    console.error(error);
+    return;
+  }
+  renderHomeownerListingsHub();
+}
 
 /* ---------- rate your collector (homeowner, on a Collected listing) ---------- */
 let pendingRatingAssignmentId = null;
