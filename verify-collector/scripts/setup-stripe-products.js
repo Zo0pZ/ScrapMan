@@ -34,9 +34,17 @@ async function main() {
     recurring: { interval: "month" }
   });
 
+  const boostProduct = await stripe.products.create({ name: "ScrapMan — Boost my listing" });
+  const boostPrice = await stripe.prices.create({
+    product: boostProduct.id,
+    unit_amount: 199, // £1.99
+    currency: "gbp"
+  });
+
   console.log("\nAdd these to your .env / cPanel Node App environment variables:\n");
   console.log(`STRIPE_PRICE_UNLOCK=${unlockPrice.id}`);
   console.log(`STRIPE_PRICE_PRO=${proPrice.id}`);
+  console.log(`STRIPE_PRICE_BOOST=${boostPrice.id}`);
 }
 
 main().catch(err => {

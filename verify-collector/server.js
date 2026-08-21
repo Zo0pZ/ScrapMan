@@ -5,10 +5,11 @@
  *      directly (no CORS header), so this runs server-side and hands back a small,
  *      safe-to-trust verdict.
  *
- *   2. Stripe billing (added later) — job-unlock one-off payments and the Pro
- *      subscription. Stripe's secret key and Supabase's service_role key can only
- *      ever live server-side, so checkout-session creation, the webhook, and the
- *      customer-portal link all live here too rather than duplicating this app.
+ *   2. Stripe billing (added later) — job-unlock one-off payments, the Pro
+ *      subscription, and homeowners' "Boost my listing" one-off payments. Stripe's
+ *      secret key and Supabase's service_role key can only ever live server-side, so
+ *      checkout-session creation, the webhook, and the customer-portal link all live
+ *      here too rather than duplicating this app.
  *
  *   3. Collector dashboard material prices (see fetchLiveMetalPrices/handleMetalPrices
  *      below) — proxies metals.dev so its API key never reaches the browser, and
@@ -33,7 +34,8 @@
  * Env vars (set via the cPanel Node App UI, or a local .env for `stripe listen` /
  * manual testing — see .env.example): SUPABASE_URL, SUPABASE_ANON_KEY,
  * SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
- * STRIPE_PRICE_UNLOCK, STRIPE_PRICE_PRO, METALS_DEV_API_KEY, DOMAIN, PORT.
+ * STRIPE_PRICE_UNLOCK, STRIPE_PRICE_PRO, STRIPE_PRICE_BOOST, METALS_DEV_API_KEY,
+ * DOMAIN, PORT.
  *
  * Routing note: cPanel's Node app proxy may or may not strip the mount path
  * (e.g. "/verify-collector") before it reaches this process, so every route below
@@ -230,10 +232,12 @@ async function handleMetalPrices(req, res) {
 
 /* ---------- Supabase helpers (service_role — server-side only, bypasses RLS) ---------- */
 
-/* Resolves the signed-in collector's id from their Supabase access token — never trust
-   a collector_id/user_id passed in the request body itself, since that'd let anyone
-   unlock jobs (or subscribe) as someone else just by editing the request. */
-async function resolveCollectorId(authHeader) {
+/* Resolves the signed-in user's profile id from their Supabase access token — never
+   trust a collector_id/homeowner_id/user_id passed in the request body itself, since
+   that'd let anyone unlock jobs, subscribe, or boost a listing as someone else just
+   by editing the request. Used by both collector flows (unlock, Pro, portal) and the
+   homeowner boost flow below — the name is deliberately role-neutral. */
+async function resolveProfileId(authHeader) {
   const token = (authHeader || "").replace(/^Bearer\s+/i, "");
   if (!token) return null;
   const res = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, {
@@ -261,6 +265,14 @@ async function supabaseUpsert(table, row) {
   if (!res.ok) throw new Error(`Supabase upsert into ${table} failed: ${res.status} ${await res.text()}`);
 }
 
+async function supabaseSelect(table, query) {
+  const res = await fetch(`${process.env.SUPABASE_URL}/rest/v1/${table}?${query}`, {
+    headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` }
+  });
+  if (!res.ok) throw new Error(`Supabase select on ${table} failed: ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
 async function supabasePatch(table, filterQuery, patch) {
   const res = await fetch(`${process.env.SUPABASE_URL}/rest/v1/${table}?${filterQuery}`, {
     method: "PATCH",
@@ -278,7 +290,7 @@ async function supabasePatch(table, filterQuery, patch) {
 /* ---------- Stripe: checkout sessions + customer portal ---------- */
 
 async function handleCreateUnlockSession(req, res, body) {
-  const collectorId = await resolveCollectorId(req.headers.authorization);
+  const collectorId = await resolveProfileId(req.headers.authorization);
   if (!collectorId) return sendJSON(res, 401, { error: "Sign in and try again." });
 
   const listingId = body && body.listingId;
@@ -296,7 +308,7 @@ async function handleCreateUnlockSession(req, res, body) {
 }
 
 async function handleCreateProSession(req, res) {
-  const collectorId = await resolveCollectorId(req.headers.authorization);
+  const collectorId = await resolveProfileId(req.headers.authorization);
   if (!collectorId) return sendJSON(res, 401, { error: "Sign in and try again." });
 
   const session = await stripe.checkout.sessions.create({
@@ -310,8 +322,32 @@ async function handleCreateProSession(req, res) {
   sendJSON(res, 200, { url: session.url });
 }
 
+async function handleCreateBoostSession(req, res, body) {
+  const homeownerId = await resolveProfileId(req.headers.authorization);
+  if (!homeownerId) return sendJSON(res, 401, { error: "Sign in and try again." });
+
+  const listingId = body && body.listingId;
+  if (!listingId) return sendJSON(res, 400, { error: "Missing listingId" });
+
+  const rows = await supabaseSelect("listings", `id=eq.${Number(listingId)}&select=homeowner_id,status`);
+  const listing = rows && rows[0];
+  if (!listing) return sendJSON(res, 404, { error: "Listing not found." });
+  if (listing.homeowner_id !== homeownerId) return sendJSON(res, 403, { error: "That's not your listing." });
+  if (listing.status !== "open") return sendJSON(res, 400, { error: "Only a pending listing can be boosted." });
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    line_items: [{ price: process.env.STRIPE_PRICE_BOOST, quantity: 1 }],
+    client_reference_id: homeownerId,
+    metadata: { type: "listing_boost", listing_id: String(listingId), homeowner_id: homeownerId },
+    success_url: `${process.env.DOMAIN}/?stripe=success&flow=boost&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.DOMAIN}/?stripe=cancel&flow=boost`
+  });
+  sendJSON(res, 200, { url: session.url });
+}
+
 async function handleCustomerPortal(req, res) {
-  const collectorId = await resolveCollectorId(req.headers.authorization);
+  const collectorId = await resolveProfileId(req.headers.authorization);
   if (!collectorId) return sendJSON(res, 401, { error: "Sign in and try again." });
 
   const lookup = await fetch(
@@ -377,6 +413,14 @@ async function fulfillCheckoutSession(session) {
       stripe_subscription_id: subscription.id,
       status: subscription.status,
       current_period_end: subscriptionPeriodEnd(subscription)
+    });
+    return;
+  }
+
+  if (meta.type === "listing_boost") {
+    await supabasePatch("listings", `id=eq.${Number(meta.listing_id)}`, {
+      is_boosted: true,
+      boosted_at: new Date().toISOString()
     });
   }
 }
@@ -476,6 +520,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && endsWithPath(pathname, "/create-subscription-session")) {
       return await handleCreateProSession(req, res);
+    }
+    if (req.method === "POST" && endsWithPath(pathname, "/create-boost-session")) {
+      return await handleCreateBoostSession(req, res, await readJSONBody(req));
     }
     if (req.method === "POST" && endsWithPath(pathname, "/customer-portal")) {
       return await handleCustomerPortal(req, res);

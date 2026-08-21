@@ -27,6 +27,18 @@ const CO2_KG_PER_MILE = 0.25; // light commercial van, UK average
 const BRASS_FRACTION_OF_COPPER = 0.72; // brass scrap isn't LME-traded; priced as a share of copper's value
 const STEEL_GUIDE_RATE_PER_KG = 0.15;  // steel scrap isn't LME-traded either; flat local guide rate
 
+/* ---------- homeowner impact counter assumptions ----------
+   Same "clearly-labelled guide/estimate" spirit as the collector figures above — the
+   app doesn't measure an actual tip-run avoided, just a typical one. */
+const TIME_SAVED_MINUTES_PER_COLLECTION = 45; // avoiding a round trip to the local tip/recycling centre
+const AVG_TIP_RUN_MILES = 6;                  // typical round-trip mileage to a local tip
+const CAR_MPG = 45;                           // average UK petrol/diesel car, not VAN_MPG (that's for a collector's van)
+const IMPACT_TIER_KG = [ // "recycled material score" — simple weight-diverted tiers, low to high
+  { kg: 200, label: "Gold" },
+  { kg: 50, label: "Silver" },
+  { kg: 0, label: "Bronze" }
+];
+
 const MATERIAL_FEED_ENDPOINT = "/verify-collector";
 const MATERIAL_PRICES_CACHE_KEY = "scrapman_metal_prices";
 const MATERIAL_PRICES_MAX_AGE = 24 * 60 * 60 * 1000; // 1 day, matches the server's own cache window
@@ -83,7 +95,7 @@ function goTo(screen) {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.nav === screen));
   if (screen === "jobs") { updateLocationUI(); setTimeout(initJobsMap, 0); ensureLocation().then(initJobsMap); renderActiveAssignment(); }
   if (screen === "route") { updateLocationUI(); setTimeout(renderRoute, 0); ensureLocation().then(renderRoute); }
-  if (screen === "track") renderTrack();
+  if (screen === "track") { renderTrack(); renderHomeownerListingsHub(); }
   if (screen === "home") {
     personalizeCouncilLink();
     if (scrapmanRole() === "collector") renderCollectorDashboard();
@@ -333,41 +345,16 @@ function refreshLocationDependentScreens() {
   if (document.getElementById("screen-route").classList.contains("active")) renderRoute();
 }
 
-/* Home screen: point the council-charges link at the homeowner's own council when we
-   already know it (never forces a permission prompt on its own). */
+/* Account screen: point the council-charges link at the homeowner's own council when
+   we already know it (never forces a permission prompt on its own). */
 async function personalizeCouncilLink() {
-  const linkEl = document.getElementById("councilLink");
   const accLinkEl = document.getElementById("accCouncilLink");
-  if (!linkEl && !accLinkEl) return;
+  if (!accLinkEl) return;
   const loc = scrapmanSavedLocation() || await scrapmanAutoLocate();
   if (!loc || !loc.council) return;
-  const href = scrapmanCouncilLink(loc.council);
-  if (linkEl) {
-    linkEl.href = href;
-    linkEl.textContent = `See ${loc.council}'s bulky waste charges →`;
-    document.getElementById("locateCouncilBtn")?.classList.add("hidden");
-  }
-  if (accLinkEl) {
-    accLinkEl.href = href;
-    document.getElementById("accCouncilSub").textContent = `${loc.council}'s bulky waste charges`;
-  }
+  accLinkEl.href = scrapmanCouncilLink(loc.council);
+  document.getElementById("accCouncilSub").textContent = `${loc.council}'s bulky waste charges`;
 }
-
-document.getElementById("locateCouncilBtn")?.addEventListener("click", async btnEvent => {
-  const btn = btnEvent.currentTarget;
-  btn.disabled = true;
-  const loc = await scrapmanRequestGeolocation();
-  btn.disabled = false;
-  if (!loc) { alert("Couldn't get your location — check your browser's location permissions."); return; }
-  const linkEl = document.getElementById("councilLink");
-  if (loc.council) {
-    linkEl.href = scrapmanCouncilLink(loc.council);
-    linkEl.textContent = `See ${loc.council}'s bulky waste charges →`;
-    btn.classList.add("hidden");
-  } else {
-    linkEl.textContent = "Couldn't work out your council — try entering a postcode instead →";
-  }
-});
 
 /* ---------- jobs screen ---------- */
 function mapListingRow(row) {
@@ -379,6 +366,7 @@ function mapListingRow(row) {
   return {
     id: row.id, title: row.title, type: row.metal_type, weight: row.weight_band,
     lat: row.lat, lng: row.lng, address: row.address, urgency: row.urgency,
+    boosted: !!row.is_boosted,
     unlocked: !!contact,
     contactName: contact && contact.contact_name, contactPhone: contact && contact.contact_phone,
     fullAddress: contact && contact.full_address
@@ -391,6 +379,7 @@ async function getAllJobs() {
     .from("listings")
     .select("*, listing_contacts(contact_name, contact_phone, full_address)")
     .eq("status", "open")
+    .order("is_boosted", { ascending: false })
     .order("created_at", { ascending: false });
   if (error) { console.error(error); return []; }
   return (data || []).map(mapListingRow);
@@ -499,6 +488,122 @@ async function renderTrack() {
   });
 }
 
+/* ---------- homeowner "My listings" hub: history, impact counters, boost ---------- */
+
+async function getMyListings() {
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return [];
+  const { data, error } = await scrapmanDb
+    .from("listings")
+    .select("*, job_assignments(status, accepted_at, updated_at)")
+    .eq("homeowner_id", scrapmanSession.user.id)
+    .order("created_at", { ascending: false });
+  if (error) { console.error(error); return []; }
+  return data || [];
+}
+
+const STATUS_DATE_VERB = { Pending: "Listed", Scheduled: "Scheduled", Collected: "Collected", Cancelled: "Cancelled" };
+
+// listings.status is already kept in sync with its assignment by the sync_listing_status
+// trigger (see schema.sql) — this just relabels it for display and picks the relevant
+// timestamp for the timestamped collection log.
+function homeownerListingStatus(listing) {
+  const embedded = listing.job_assignments;
+  const assignment = (Array.isArray(embedded) ? embedded[0] : embedded) || null;
+  if (listing.status === "collected") return { label: "Collected", at: assignment && assignment.updated_at };
+  if (listing.status === "cancelled") return { label: "Cancelled", at: assignment && assignment.updated_at };
+  if (listing.status === "assigned") return { label: "Scheduled", at: assignment && assignment.accepted_at };
+  return { label: "Pending", at: listing.created_at };
+}
+
+function impactTierLabel(kg) {
+  return (IMPACT_TIER_KG.find(t => kg >= t.kg) || IMPACT_TIER_KG[IMPACT_TIER_KG.length - 1]).label;
+}
+
+// Time/fuel/weight are all estimates — see the assumptions block near the top of this
+// file. mpg here means UK imperial miles-per-gallon (4.546 L/gal), same as the
+// collector ROI tracker's fuel figure.
+function renderHomeownerImpact(listings) {
+  const collected = listings.filter(l => l.status === "collected");
+  const timeSavedMins = collected.length * TIME_SAVED_MINUTES_PER_COLLECTION;
+  const timeSavedLabel = timeSavedMins >= 60 ? `${(timeSavedMins / 60).toFixed(1)} hrs` : `${timeSavedMins} min`;
+  const milesSaved = collected.length * AVG_TIP_RUN_MILES;
+  const costSaved = (milesSaved / CAR_MPG) * 4.546 * FUEL_PRICE_PER_LITRE;
+  const kgDiverted = collected.reduce((sum, l) => sum + (WEIGHT_BAND_KG[l.weight_band] || WEIGHT_BAND_KG.medium), 0);
+
+  document.getElementById("homeownerImpactStats").innerHTML = `
+    <div class="stat-box save"><strong>${timeSavedLabel}</strong><span>Time saved</span></div>
+    <div class="stat-box save"><strong>&pound;${costSaved.toFixed(0)}</strong><span>Fuel &amp; cost saved</span></div>
+    <div class="stat-box save"><strong>${kgDiverted.toFixed(0)} kg</strong><span>${impactTierLabel(kgDiverted)} &middot; diverted</span></div>
+  `;
+}
+
+function renderMyListingsList(listings) {
+  const list = document.getElementById("myListingsList");
+  if (!listings.length) {
+    list.innerHTML = `<p class="job-meta">No listings yet — head to List to get your first collection booked.</p>`;
+    return;
+  }
+  list.innerHTML = listings.map(l => {
+    const { label, at } = homeownerListingStatus(l);
+    const dateLabel = at ? new Date(at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
+    let actionHTML = "";
+    if (label === "Pending") {
+      actionHTML = l.is_boosted
+        ? `<span class="tag boosted-tag">&#128640; Boosted</span>`
+        : `<button class="add-btn" data-boost="${l.id}">Boost &mdash; &pound;1.99</button>`;
+    }
+    return `
+    <div class="job-card ${l.is_boosted ? "boosted" : ""}">
+      <span class="job-icon" aria-hidden="true">${TYPE_ICON[l.metal_type] || TYPE_ICON.mixed}</span>
+      <div class="job-body">
+        <h4>${esc(l.title)}</h4>
+        <p class="job-meta">${esc(l.address)}</p>
+        <div class="job-tags">
+          <span class="status-pill status-${label.toLowerCase()}">${label}</span>
+          ${dateLabel ? `<span class="tag">${STATUS_DATE_VERB[label]} ${esc(dateLabel)}</span>` : ""}
+        </div>
+        ${actionHTML ? `<div class="job-actions">${actionHTML}</div>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function renderHomeownerListingsHub() {
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return;
+  const listings = await getMyListings();
+  renderHomeownerImpact(listings);
+  renderMyListingsList(listings);
+}
+
+document.getElementById("myListingsList").addEventListener("click", e => {
+  const boostBtn = e.target.closest("[data-boost]");
+  if (boostBtn) startBoost(Number(boostBtn.dataset.boost));
+});
+
+let pendingBoostId = null;
+
+function startBoost(id) {
+  pendingBoostId = id;
+  const btn = document.getElementById("boostBtn");
+  btn.disabled = false;
+  btn.textContent = "Boost — £1.99";
+  openSheet("overlay-boost");
+}
+
+document.getElementById("boostBtn").addEventListener("click", async () => {
+  if (pendingBoostId == null) return;
+  const btn = document.getElementById("boostBtn");
+  btn.disabled = true;
+  btn.textContent = "Redirecting to Stripe…";
+  try {
+    await startStripeCheckout("/create-boost-session", { listingId: pendingBoostId });
+  } catch {
+    btn.disabled = false;
+    btn.textContent = "Boost — £1.99";
+    alert("Couldn't start checkout — please try again in a moment.");
+  }
+});
+
 function contactBlockHTML(j) {
   if (!j.contactName && !j.contactPhone) {
     return `<div class="contact-block"><p class="contact-missing">Contact details weren't provided for this listing.</p></div>`;
@@ -517,17 +622,18 @@ async function renderJobs() {
   const jobs = allJobs
     .filter(j => activeFilter === "all" || j.type === activeFilter)
     .map(j => ({ ...j, dist: haversine(DEPOT, j) }))
-    .sort((a, b) => a.dist - b.dist);
+    .sort((a, b) => (Number(b.boosted) - Number(a.boosted)) || (a.dist - b.dist));
 
   list.innerHTML = jobs.map(j => {
     const unlocked = j.unlocked;
     return `
-    <div class="job-card">
+    <div class="job-card ${j.boosted ? "boosted" : ""}">
       <span class="job-icon" aria-hidden="true">${TYPE_ICON[j.type] || TYPE_ICON.mixed}</span>
       <div class="job-body">
         <h4>${esc(j.title)}</h4>
         <p class="job-meta">${esc(j.address)} &middot; ${j.dist.toFixed(1)} mi away</p>
         <div class="job-tags">
+          ${j.boosted ? '<span class="tag boosted-tag">&#128640; Boosted</span>' : ""}
           <span class="tag">${TYPE_LABEL[j.type] || esc(j.type)}</span>
           <span class="tag">${WEIGHT_LABEL[j.weight] || esc(j.weight)}</span>
           ${j.urgency === "today" ? '<span class="tag urgent">Wanted today</span>' : ""}
@@ -663,6 +769,9 @@ function handleStripeReturn() {
     // guaranteed), then re-render whatever's currently showing it.
     scrapmanRefreshSession().then(() => { renderAccount(); renderJobs(); });
     alert("You're on ScrapMan Pro — every job's contact details are now visible.");
+  } else if (status === "success" && flow === "boost") {
+    setTimeout(renderHomeownerListingsHub, 1500); // give the webhook a moment to land
+    alert("Boost paid — your listing now sits at the top of collectors' feeds.");
   } else if (status === "success") {
     setTimeout(renderJobs, 1500); // give the webhook a moment to land
     alert("Payment received — the contact details are unlocked below.");
@@ -760,6 +869,18 @@ document.getElementById("insuranceGroup").addEventListener("click", e => {
 
 /* ---------- account screen ---------- */
 function renderAccount() {
+  // accVerify/accPro are collector-only (data-role="collector" hides them from
+  // homeowners via scrapmanApplyRoleUI). Skip building their content at all for a
+  // signed-in homeowner rather than just relying on the CSS to hide it — but only
+  // once accounts/roles are real; in unconfigured demo mode (no accounts at all)
+  // they still render as a preview, same as every other data-role element.
+  if (SCRAPMAN_AUTH_CONFIGURED && scrapmanRole() && scrapmanRole() !== "collector") {
+    document.getElementById("accVerify").innerHTML = "";
+    document.getElementById("accPro").innerHTML = "";
+    renderInstallRow();
+    return;
+  }
+
   const c = getCollector();
   const verifyNote = c && c.eaCarrier
     ? `<p class="demo-note status-ok">Verified live against the Environment Agency register${c.eaCarrier.expiryDate ? ` &middot; carrier reg expires ${esc(c.eaCarrier.expiryDate)}` : ""}${c.eaScrapMetalLicence && c.eaScrapMetalLicence.expiryDate ? ` &middot; licence expires ${esc(c.eaScrapMetalLicence.expiryDate)}` : ""}.</p>`
@@ -988,14 +1109,15 @@ async function initJobsMap() {
   L.marker([DEPOT.lat, DEPOT.lng]).addTo(jobsMap).bindPopup(usingDefaultLocation ? "Default location — set yours" : "You are here");
   const jobs = await getAllJobs();
   jobs.filter(j => activeFilter === "all" || j.type === activeFilter).forEach(j => {
+    const markerColor = routeIds.includes(j.id) ? "#037a56" : j.boosted ? "#c98a00" : "#e05f00";
     const marker = L.circleMarker([j.lat, j.lng], {
       radius: 8,
-      color: routeIds.includes(j.id) ? "#037a56" : "#e05f00",
-      fillColor: routeIds.includes(j.id) ? "#04966b" : "#ff6b00",
+      color: markerColor,
+      fillColor: routeIds.includes(j.id) ? "#04966b" : j.boosted ? "#ffcf40" : "#ff6b00",
       fillOpacity: 0.9,
       weight: 2
     }).addTo(jobsMap);
-    marker.bindPopup(esc(j.title));
+    marker.bindPopup(esc(j.title) + (j.boosted ? " — Boosted" : ""));
   });
   renderJobs();
 }
@@ -1221,35 +1343,11 @@ function recalcScrapCalculator(table) {
 document.getElementById("calcWeight").addEventListener("input", () => recalcScrapCalculator(currentMaterialTable));
 document.getElementById("calcMaterial").addEventListener("change", () => recalcScrapCalculator(currentMaterialTable));
 
-function renderComplianceBadge() {
-  const el = document.getElementById("complianceBadge");
-  const c = getCollector();
-  if (!c) { el.innerHTML = `<p class="job-meta">Sign in to see your compliance status.</p>`; return; }
-
-  if (c.status === "verified") {
-    const carrierExpiry = c.eaCarrier && c.eaCarrier.expiryDate;
-    const licenceExpiry = c.eaScrapMetalLicence && c.eaScrapMetalLicence.expiryDate;
-    el.innerHTML = `
-      <div class="toggle-row">
-        <div><strong>${esc(c.businessName || "Collector")}</strong><span>Waste carrier registration &mdash; valid</span></div>
-        <span class="badge-verified">&#10003; Verified</span>
-      </div>
-      <p class="demo-note status-ok">Carrier reg ${esc(c.carrierRef || "—")}${carrierExpiry ? ` &middot; expires ${esc(carrierExpiry)}` : ""}${c.smdCouncil ? ` &middot; ${esc(c.smdCouncil)} SMD licence ${esc(c.smdLicence || "—")}${licenceExpiry ? ` (expires ${esc(licenceExpiry)})` : ""}` : ""}.</p>
-    `;
-  } else {
-    el.innerHTML = `
-      <div class="toggle-row">
-        <div><strong>Not yet verified</strong><span>Homeowners can't see your contact details until you're verified.</span></div>
-        <button class="add-btn" id="dashVerifyBtn">Get verified</button>
-      </div>
-    `;
-    document.getElementById("dashVerifyBtn").addEventListener("click", () => goTo("verify"));
-  }
-}
-
+// Compliance status used to have its own card here too — removed in favour of the
+// Account screen's accVerify card (renderAccount()), which already shows the same
+// verified/not-verified status, business name, carrier reg, and SMD licence details,
+// so collectors now see it in one place instead of two slightly different copies.
 async function renderCollectorDashboard() {
-  renderComplianceBadge();
-
   const [feed, history] = await Promise.all([fetchMetalPrices(), fetchCollectorJobHistory()]);
   currentMaterialTable = renderMaterialFeed(feed);
   populateCalculatorMaterials(currentMaterialTable);

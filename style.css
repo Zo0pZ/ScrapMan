@@ -221,19 +221,6 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
   text-underline-offset: 3px;
 }
 
-/* COUNCIL LOCATE ROW (home) */
-.council-row { display: flex; align-items: center; gap: 4px; }
-.council-row .council-link { flex: 1; }
-.locate-btn {
-  border: 1.5px solid var(--color-accent); background: transparent; color: var(--color-accent-dark);
-  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  transition: background var(--transition);
-}
-.locate-btn svg { width: 18px; height: 18px; }
-.locate-btn:hover { background: var(--color-accent-soft); }
-.locate-btn.hidden { display: none; }
-
 /* BUTTONS */
 .cta {
   border: none;
@@ -366,6 +353,7 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
   transition: box-shadow var(--transition), transform var(--transition);
 }
 .job-card:hover { box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.job-card.boosted { border-color: var(--color-urgent-text); background: var(--color-urgent-bg); }
 .job-icon {
   width: 40px; height: 40px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
@@ -380,6 +368,14 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
 .job-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 .tag { background: var(--color-muted); border-radius: 999px; padding: 3px 9px; font-size: 0.72rem; font-weight: 700; color: var(--color-muted-foreground); }
 .tag.urgent { background: var(--color-urgent-bg); color: var(--color-urgent-text); }
+.tag.boosted-tag { background: var(--color-urgent-text); color: var(--color-urgent-bg); }
+
+/* STATUS PILL (homeowner listing history) */
+.status-pill { border-radius: 999px; padding: 3px 9px; font-size: 0.72rem; font-weight: 800; }
+.status-pill.status-pending { background: var(--color-muted); color: var(--color-muted-foreground); }
+.status-pill.status-scheduled { background: var(--color-accent-soft); color: var(--color-accent-dark); }
+.status-pill.status-collected { background: var(--color-positive-soft); color: var(--color-positive-dark); }
+.status-pill.status-cancelled { background: var(--color-danger-soft); color: var(--color-danger); }
 .add-btn {
   border: 1.5px solid var(--color-primary-dark);
   background: var(--color-surface);
@@ -528,8 +524,6 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
   background: none; border: none; color: #8a96a0; font-size: 1.3rem;
   line-height: 1; padding: 4px 6px; cursor: pointer;
 }
-.council-link { display: block; text-align: left; }
-
 /* FIELD EXTRAS */
 .field-hint { font-weight: 500; font-size: 0.75rem; color: var(--color-muted-foreground); }
 
@@ -647,9 +641,6 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
   font-weight: 700;
   color: var(--color-positive-dark);
 }
-
-.compliance-badge { display: flex; flex-direction: column; gap: 6px; }
-.compliance-badge .toggle-row + .demo-note { margin-top: 2px; }
 
 /* ACCOUNT */
 .account-card {

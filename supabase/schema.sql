@@ -93,10 +93,19 @@ create table listings (
   address text not null,
   photo_url text,
   status text not null default 'open' check (status in ('open','assigned','collected','cancelled')),
+  is_boosted boolean not null default false,
+  boosted_at timestamptz,
   created_at timestamptz not null default now()
 );
 
 alter table listings enable row level security;
+
+-- Same write model as job_unlocks/pro_subscriptions below: the "homeowners manage
+-- their own listings" policy is `for all`, which would otherwise let a homeowner's
+-- own browser flip is_boosted for free. Only the verify-collector Node app's
+-- service_role key (used only after Stripe confirms a "Boost my listing" payment —
+-- see its webhook handler) may write these two columns.
+revoke update (is_boosted, boosted_at) on listings from authenticated;
 
 -- Signed-in collectors can browse the rough listing (marketplace) — the homeowner's
 -- exact address and contact details live in listing_contacts instead, gated by

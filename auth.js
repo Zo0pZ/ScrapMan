@@ -118,7 +118,13 @@ function scrapmanApplyRoleUI() {
   }
   document.querySelectorAll("[data-role]").forEach(el => {
     const allowed = el.dataset.role.split(" ");
-    if (SCRAPMAN_AUTH_CONFIGURED && role && !allowed.includes(role)) el.classList.add("hidden");
+    // Not just "role is known and doesn't match" — while accounts are configured but
+    // the signed-in user's role hasn't resolved yet (or nobody's signed in at all),
+    // `role` is null here too, and `allowed.includes(null)` is false, so this still
+    // hides. Getting that wrong previously meant a visitor whose role wasn't known yet
+    // briefly saw BOTH homeowner and collector content merged together (e.g. the
+    // collector-only dashboard on the Home screen) instead of neither.
+    if (SCRAPMAN_AUTH_CONFIGURED && !allowed.includes(role)) el.classList.add("hidden");
   });
   document.querySelectorAll("[data-signed-in-only]").forEach(el => {
     if (SCRAPMAN_AUTH_CONFIGURED && !scrapmanSession) el.classList.add("hidden");

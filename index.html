@@ -182,11 +182,6 @@
           </div>
         </section>
 
-        <section class="dash-section" id="complianceSection">
-          <h2 class="dash-title">Compliance</h2>
-          <div class="account-card compliance-badge" id="complianceBadge"></div>
-        </section>
-
       </div>
 
       <div class="how-strip" data-role="homeowner">
@@ -222,13 +217,6 @@
         </div>
       </div>
 
-      <button class="link-btn" data-nav="pricing" data-role="homeowner">See pricing &rarr;</button>
-      <div class="council-row" data-role="homeowner">
-        <a class="link-btn council-link" href="https://www.gov.uk/find-local-council" target="_blank" rel="noopener" id="councilLink">Compare your council's bulky waste charges &rarr;</a>
-        <button type="button" class="locate-btn" id="locateCouncilBtn" aria-label="Use my location to find my council">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
-        </button>
-      </div>
     </section>
 
     <!-- LIST SCRAP (public) -->
@@ -355,10 +343,13 @@
       </div>
     </section>
 
-    <!-- TRACK (homeowner — live collector location once a job's accepted) -->
+    <!-- MY LISTINGS (homeowner — active tracking, listing history, impact & boost) -->
     <section class="screen needs-backend" id="screen-track" data-role="homeowner">
-      <h2 class="screen-title">Track your collection</h2>
-      <p class="screen-sub">Once a collector accepts one of your listings, you can watch them on the way here.</p>
+      <h2 class="screen-title">My listings</h2>
+      <p class="screen-sub">Track an active collection, boost a pending listing to the top of the queue, and see what you've saved.</p>
+
+      <div class="route-stats" id="homeownerImpactStats"></div>
+
       <div id="trackEmpty" class="empty-state">
         <span class="vc-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5v-9Z"/><path d="M3.5 7.5 12 12l8.5-4.5"/><path d="M12 12v9"/></svg>
@@ -370,6 +361,9 @@
         <div id="trackMap" class="mini-map" style="height:220px"></div>
         <div class="account-card" id="trackCollectorCard"></div>
       </div>
+
+      <h3 class="dash-title" style="margin-top:22px">Your listings</h3>
+      <div class="job-list" id="myListingsList"></div>
     </section>
 
     <!-- PRICING -->
@@ -465,8 +459,8 @@
         </div>
       </div>
 
-      <div class="account-card" id="accVerify"></div>
-      <div class="account-card" id="accPro"></div>
+      <div class="account-card" id="accVerify" data-role="collector"></div>
+      <div class="account-card" id="accPro" data-role="collector"></div>
 
       <div class="account-card hidden" id="accInstall">
         <div class="toggle-row">
@@ -525,7 +519,7 @@
     </button>
     <button class="tab needs-backend" data-nav="track" data-role="homeowner">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5v-9Z"/><path d="M3.5 7.5 12 12l8.5-4.5"/><path d="M12 12v9"/></svg>
-      Track
+      Listings
     </button>
     <button class="tab" data-nav="jobs" data-role="collector">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5v-9Z"/><path d="M3.5 7.5 12 12l8.5-4.5"/><path d="M12 12v9"/></svg>
@@ -560,6 +554,17 @@
       <p class="sheet-sub">&pound;6.99/mo &mdash; unlimited contact unlocks, route planner and priority on new listings. Cancel any time on the Account screen.</p>
       <p class="demo-note">You'll be taken to Stripe's secure checkout to subscribe, then brought straight back here.</p>
       <button class="cta cta-primary full-width" id="proBtn">Subscribe &mdash; &pound;6.99/mo</button>
+      <button class="link-btn sheet-close">Cancel</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay-boost">
+    <div class="sheet">
+      <span class="sheet-handle" aria-hidden="true"></span>
+      <h3>Boost this listing</h3>
+      <p class="sheet-sub">One-off &pound;1.99 &mdash; moves your listing to the top of nearby collectors' feeds with a highlighted badge, so it gets picked up faster.</p>
+      <p class="demo-note">You'll be taken to Stripe's secure checkout to pay, then brought straight back here.</p>
+      <button class="cta cta-primary full-width" id="boostBtn">Boost &mdash; &pound;1.99</button>
       <button class="link-btn sheet-close">Cancel</button>
     </div>
   </div>
