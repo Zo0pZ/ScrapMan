@@ -84,9 +84,18 @@ function getCollector() {
 function isVerified() { return getCollector()?.status === "verified"; }
 
 /* ---------- navigation ---------- */
+// Home and Pricing are the two screens marked data-public in index.html — browsable
+// without an account (marketing pitch + full pricing). Reaching them the first time
+// (page load, before any goTo() call) worked, but clicking to any OTHER screen and
+// back did not: every screen except literally "auth" used to force-redirect there,
+// so once you navigated away signed out, even clicking the Home tab just kept
+// re-showing Auth with no way back short of a refresh. Keep this list in sync with
+// which screens actually carry data-public content.
+const PUBLIC_SCREENS_SIGNED_OUT = ["auth", "home", "pricing"];
+
 function goTo(screen) {
-  // Signed-out + configured: everything except the auth screen redirects to sign-up/sign-in.
-  if (SCRAPMAN_AUTH_CONFIGURED && !scrapmanSession && screen !== "auth") {
+  // Signed-out + configured: anything not public redirects to sign-up/sign-in.
+  if (SCRAPMAN_AUTH_CONFIGURED && !scrapmanSession && !PUBLIC_SCREENS_SIGNED_OUT.includes(screen)) {
     screen = "auth";
   }
   if (screen !== "thread") unsubscribeFromThreadMessages();
