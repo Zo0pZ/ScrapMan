@@ -267,8 +267,52 @@ document.getElementById("resetPasswordForm").addEventListener("submit", async e 
   goTo("home");
 });
 
+/* ---------- Home hero carousel ----------
+   Both .hero-slide elements are data-public, so while the role is still unknown
+   (signed out) scrapmanApplyRoleUI() leaves both visible — this turns that into an
+   actual swipeable/auto-advancing carousel between the homeowner and collector
+   pitches. The moment a role IS known, exactly one slide stays visible (the other
+   gets .hidden by the normal data-role gating, unrelated to this function), and this
+   just detects that and leaves it as a plain static hero — no dots, no timer. */
+let heroCarouselTimer = null;
+
+function initHeroCarousel() {
+  const track = document.getElementById("heroTrack");
+  const dotsEl = document.getElementById("heroDots");
+  if (!track || !dotsEl) return;
+
+  clearInterval(heroCarouselTimer);
+  heroCarouselTimer = null;
+
+  const visible = [...track.children].filter(s => !s.classList.contains("hidden"));
+  if (visible.length <= 1) { dotsEl.classList.add("hidden"); return; }
+  dotsEl.classList.remove("hidden");
+
+  const dots = [...dotsEl.children];
+  const goToSlide = i => track.scrollTo({ left: track.clientWidth * i, behavior: "smooth" });
+  // Any manual interaction (a dot, or swiping/scrolling the track directly) stops the
+  // auto-advance for good — resuming it after a manual pick would just fight whoever
+  // is still reading the slide they chose.
+  const stopAutoAdvance = () => { clearInterval(heroCarouselTimer); heroCarouselTimer = null; };
+
+  dots.forEach((dot, i) => { dot.onclick = () => { goToSlide(i); stopAutoAdvance(); }; });
+  track.onscroll = () => {
+    const i = Math.round(track.scrollLeft / (track.clientWidth || 1));
+    dots.forEach((dot, di) => dot.classList.toggle("active", di === i));
+  };
+  track.addEventListener("pointerdown", stopAutoAdvance, { once: true });
+
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    heroCarouselTimer = setInterval(() => {
+      const current = Math.round(track.scrollLeft / (track.clientWidth || 1));
+      goToSlide((current + 1) % visible.length);
+    }, 6000);
+  }
+}
+
 window.addEventListener("scrapman:auth", () => {
   scrapmanApplyRoleUI();
+  initHeroCarousel();
   const onAuthScreen = document.getElementById("screen-auth").classList.contains("active");
   if (scrapmanSession && onAuthScreen) goTo("home");
   if (SCRAPMAN_AUTH_CONFIGURED && !scrapmanSession && !onAuthScreen) goTo("auth");
@@ -1491,6 +1535,13 @@ document.getElementById("listForm").addEventListener("submit", async e => {
 renderJobs();
 personalizeCouncilLink();
 handleStripeReturn();
+initHeroCarousel();
+// Unconfigured (demo) mode never fires scrapman:auth (see auth.js), so the
+// scrapmanApplyRoleUI() call above's normal trigger for re-checking the carousel never
+// happens either — DOMContentLoaded is what demo mode uses instead (auth.js registers
+// its own scrapmanApplyRoleUI() listener on it first, so by registration order this
+// always runs after that, seeing the correct, already-updated hidden state).
+document.addEventListener("DOMContentLoaded", initHeroCarousel);
 
 /* ---------- PWA service worker ---------- */
 if ("serviceWorker" in navigator) {

@@ -198,6 +198,28 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
 }
 .hero-sub { color: var(--color-muted-foreground); font-size: 1rem; line-height: 1.55; margin: 0; }
 
+/* HERO CAROUSEL — see index.html's comment above .hero-carousel and
+   initHeroCarousel() in app.js. Collapses to a plain static hero on its own
+   whenever only one .hero-slide is visible (signed in, role known) — no separate
+   "carousel mode" vs "single hero mode" CSS needed, it's just how many slides the
+   track happens to contain at a given moment. */
+.hero-track {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.hero-track::-webkit-scrollbar { display: none; }
+.hero-slide { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; }
+.hero-dots { display: flex; justify-content: center; gap: 6px; margin: 2px 0 16px; }
+.hero-dot {
+  width: 8px; height: 8px; padding: 0; border: none; border-radius: 50%;
+  background: var(--color-border);
+  transition: background var(--transition), transform var(--transition);
+}
+.hero-dot.active { background: var(--color-accent); transform: scale(1.3); }
+
 .cta-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 28px; }
 
 .how-strip { margin-bottom: 24px; }
@@ -876,7 +898,7 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
       "faq faq"
       "collectors collectors";
   }
-  #screen-home > .hero { grid-area: hero; }
+  #screen-home > .hero-carousel { grid-area: hero; }
   #screen-home > .cta-row { grid-area: cta; align-self: center; }
   #screen-home > .install-banner { grid-area: banner; }
   #screen-home > .collector-dashboard { grid-area: dash; }
@@ -885,7 +907,7 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
   #screen-home > .repeat-cta { grid-area: repeat; }
   #screen-home > .home-faq { grid-area: faq; }
   #screen-home > .collector-teaser { grid-area: collectors; }
-  #screen-home > .hero { padding: 0; }
+  .hero-slide { padding: 0; }
   .hero-sub { max-width: 52ch; }
   .cta-row { margin-bottom: 0; }
 
