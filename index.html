@@ -123,10 +123,20 @@
 
     <!-- HOME -->
     <section class="screen active" id="screen-home">
-      <div class="hero">
+      <div class="hero" data-role="homeowner" data-public>
         <p class="eyebrow">Any Old Iron</p>
         <h1>Scrap gone from your doorstep. No lifting, no tip runs.</h1>
         <p class="hero-sub">Snap a photo, drop your postcode, and a vetted local collector comes to you &mdash; no hanging around, no hauling it anywhere. Free for households, always.</p>
+      </div>
+
+      <!-- Collector-only greeting, shown once actually signed in as a collector (not
+           data-public — unlike the homeowner hero above, this isn't meant for
+           signed-out visitors). Starts hidden for the same reason as
+           #collectorDashboard below: role resolution is async, so it must not flash
+           up before we actually know the visitor is a collector. -->
+      <div class="hero hidden" data-role="collector">
+        <h1>Never miss a job. Never waste a trip.</h1>
+        <p class="hero-sub">Browse verified listings near you, unlock the ones worth your time, and let route planning cut the driving between stops. No cold-calling, no guesswork on what's actually there.</p>
       </div>
 
       <div class="install-banner hidden" id="installBanner">
