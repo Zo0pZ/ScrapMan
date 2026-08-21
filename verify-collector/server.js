@@ -145,6 +145,33 @@ async function checkScrapMetalLicence(rawCouncil, rawLicenceNumber) {
   };
 }
 
+/* Shared by handleVerify (public, check-only) and handleSubmitVerification (authed,
+   writes collector_profiles) below — both need the exact same "is this actually
+   verified" computation, and it must only ever be computed here, server-side, never
+   trusted from the client (see the security review: a collector's own browser could
+   otherwise upsert verification_status = 'verified' with fabricated EA data). */
+async function runVerificationChecks(carrierRef, council, licenceNumber) {
+  const [carrier, scrapMetalLicence] = await Promise.all([
+    checkCarrierRegistration(carrierRef),
+    checkScrapMetalLicence(council, licenceNumber)
+  ]);
+  const carrierOK = carrier.checked ? (carrier.found && !carrier.expired) : true;
+  const licenceOK = scrapMetalLicence.checked ? (scrapMetalLicence.found && !scrapMetalLicence.expired) : true;
+  const anyChecked = carrier.checked || scrapMetalLicence.checked;
+  return { verified: anyChecked && carrierOK && licenceOK, carrier, scrapMetalLicence };
+}
+
+function verificationResponsePayload({ verified, carrier, scrapMetalLicence }) {
+  return {
+    verified,
+    carrier,
+    scrapMetalLicence,
+    source: "Environment Agency Public Registers Online",
+    attribution: "Contains Environment Agency information © Environment Agency and/or database right.",
+    checkedAt: new Date().toISOString()
+  };
+}
+
 async function handleVerify(req, res, params) {
   const { carrierRef, council, licenceNumber } = params;
   if (!carrierRef && !licenceNumber) {
@@ -152,23 +179,8 @@ async function handleVerify(req, res, params) {
   }
 
   try {
-    const [carrier, scrapMetalLicence] = await Promise.all([
-      checkCarrierRegistration(carrierRef),
-      checkScrapMetalLicence(council, licenceNumber)
-    ]);
-
-    const carrierOK = carrier.checked ? (carrier.found && !carrier.expired) : true;
-    const licenceOK = scrapMetalLicence.checked ? (scrapMetalLicence.found && !scrapMetalLicence.expired) : true;
-    const anyChecked = carrier.checked || scrapMetalLicence.checked;
-
-    sendJSON(res, 200, {
-      verified: anyChecked && carrierOK && licenceOK,
-      carrier,
-      scrapMetalLicence,
-      source: "Environment Agency Public Registers Online",
-      attribution: "Contains Environment Agency information © Environment Agency and/or database right.",
-      checkedAt: new Date().toISOString()
-    });
+    const result = await runVerificationChecks(carrierRef, council, licenceNumber);
+    sendJSON(res, 200, verificationResponsePayload(result));
   } catch (err) {
     sendJSON(res, 502, {
       error: "Couldn't reach the Environment Agency register — try again shortly.",
@@ -285,6 +297,31 @@ async function supabasePatch(table, filterQuery, patch) {
     body: JSON.stringify(patch)
   });
   if (!res.ok) throw new Error(`Supabase patch on ${table} failed: ${res.status} ${await res.text()}`);
+}
+
+/* ---------- Collector verification submission ----------
+   collector_profiles' verification columns can only be written here (see
+   supabase/migrations/003_close_rls_gaps.sql — the client's own upsert policy was
+   dropped entirely). The EA check itself is re-run server-side rather than trusting
+   whatever verdict the client claims it got from handleVerify above. */
+async function handleSubmitVerification(req, res, body) {
+  const collectorId = await resolveProfileId(req.headers.authorization);
+  if (!collectorId) return sendJSON(res, 401, { error: "Sign in and try again." });
+
+  const { businessName, carrierRef, smdCouncil, smdLicence, insurance } = body || {};
+  const result = await runVerificationChecks(carrierRef, smdCouncil, smdLicence);
+
+  if (result.verified) {
+    await supabaseUpsert("collector_profiles", {
+      profile_id: collectorId,
+      business_name: businessName, carrier_ref: carrierRef,
+      smd_council: smdCouncil, smd_licence: smdLicence, insurance: !!insurance,
+      verification_status: "verified", verified_at: new Date().toISOString(),
+      ea_carrier: result.carrier, ea_scrap_metal_licence: result.scrapMetalLicence
+    });
+  }
+
+  sendJSON(res, 200, verificationResponsePayload(result));
 }
 
 /* ---------- Stripe: checkout sessions + customer portal ---------- */
@@ -523,6 +560,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && endsWithPath(pathname, "/create-boost-session")) {
       return await handleCreateBoostSession(req, res, await readJSONBody(req));
+    }
+    if (req.method === "POST" && endsWithPath(pathname, "/submit-verification")) {
+      return await handleSubmitVerification(req, res, await readJSONBody(req));
     }
     if (req.method === "POST" && endsWithPath(pathname, "/customer-portal")) {
       return await handleCustomerPortal(req, res);

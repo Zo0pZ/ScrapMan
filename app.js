@@ -832,10 +832,22 @@ document.getElementById("verifyForm").addEventListener("submit", async e => {
 
   let result;
   try {
-    const res = await fetch(VERIFY_ENDPOINT, {
+    // /submit-verification (not the plain /verify-collector check) — it re-runs the EA
+    // check itself server-side and, only if that succeeds, writes collector_profiles
+    // with its own service_role key. The client can no longer write verification_status
+    // itself (see supabase/migrations/003_close_rls_gaps.sql) — a self-reported "yes
+    // I'm verified" from the browser can't be trusted.
+    const { data: { session } } = await scrapmanDb.auth.getSession();
+    const res = await fetch(`${VERIFY_ENDPOINT}/submit-verification`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ carrierRef: profile.carrierRef, council: profile.smdCouncil, licenceNumber: profile.smdLicence })
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session && session.access_token}`
+      },
+      body: JSON.stringify({
+        businessName: profile.businessName, carrierRef: profile.carrierRef,
+        smdCouncil: profile.smdCouncil, smdLicence: profile.smdLicence, insurance: profile.insurance
+      })
     });
     if (!res.ok) throw new Error(`status ${res.status}`);
     result = await res.json();
@@ -862,13 +874,8 @@ document.getElementById("verifyForm").addEventListener("submit", async e => {
     return;
   }
 
-  await scrapmanDb.from("collector_profiles").upsert({
-    profile_id: scrapmanSession.user.id,
-    business_name: profile.businessName, carrier_ref: profile.carrierRef,
-    smd_council: profile.smdCouncil, smd_licence: profile.smdLicence, insurance: profile.insurance,
-    verification_status: "verified", verified_at: new Date().toISOString(),
-    ea_carrier: result.carrier, ea_scrap_metal_licence: result.scrapMetalLicence
-  });
+  // The server has already written the verified status above — just refresh our
+  // cached copy of it.
   await scrapmanRefreshSession();
   goTo("account");
 });

@@ -75,10 +75,13 @@ create policy "collector profiles readable by anyone signed in"
   on collector_profiles for select
   using (auth.uid() is not null);
 
-create policy "collectors manage their own verification profile"
-  on collector_profiles for all
-  using (auth.uid() = profile_id)
-  with check (auth.uid() = profile_id);
+-- Deliberately NO write policy for collectors themselves — verification_status,
+-- verified_at, ea_carrier, ea_scrap_metal_licence, rating_avg, rating_count, and
+-- jobs_completed must never be settable by the collector's own browser (that would let
+-- anyone self-grant "Verified" with fabricated EA data, or fabricate their own rating).
+-- Only the verify-collector Node app's service_role key writes this table — see its
+-- /submit-verification endpoint (verification fields) and the recalc_collector_rating
+-- trigger below (rating fields), both of which bypass RLS entirely as service_role.
 
 -- ---------- Listings (homeowner's scrap items) ----------
 create table listings (
@@ -100,13 +103,6 @@ create table listings (
 
 alter table listings enable row level security;
 
--- Same write model as job_unlocks/pro_subscriptions below: the "homeowners manage
--- their own listings" policy is `for all`, which would otherwise let a homeowner's
--- own browser flip is_boosted for free. Only the verify-collector Node app's
--- service_role key (used only after Stripe confirms a "Boost my listing" payment —
--- see its webhook handler) may write these two columns.
-revoke update (is_boosted, boosted_at) on listings from authenticated;
-
 -- Signed-in collectors can browse the rough listing (marketplace) — the homeowner's
 -- exact address and contact details live in listing_contacts instead, gated by
 -- job_unlocks, so they're never returned until the collector has paid to unlock the job.
@@ -118,6 +114,24 @@ create policy "homeowners manage their own listings"
   on listings for all
   using (auth.uid() = homeowner_id)
   with check (auth.uid() = homeowner_id);
+
+-- The "homeowners manage their own listings" policy above is `for all`, which would
+-- otherwise let a homeowner's own browser flip is_boosted for free (RLS only checks row
+-- ownership, not which columns are being written). A column-level REVOKE alone can't
+-- fix this: `authenticated` needs table-level INSERT/UPDATE to create and no-op-edit
+-- listings at all, and Postgres column grants can't restrict *below* a table-level
+-- grant — only ADD to a narrower one. So: revoke the table-level grants for these two
+-- operations entirely, then re-grant only the specific columns homeowners legitimately
+-- write. is_boosted/boosted_at are excluded from both — they only change via the
+-- verify-collector Node app's service_role key, after Stripe confirms a "Boost my
+-- listing" payment (see its webhook handler). status is excluded too — it only changes
+-- via the sync_listing_status trigger below (SECURITY DEFINER, unaffected by these
+-- grants).
+revoke insert, update on listings from authenticated;
+grant insert (homeowner_id, title, metal_type, weight_band, urgency, lat, lng, address, photo_url)
+  on listings to authenticated;
+grant update (title, metal_type, weight_band, urgency, lat, lng, address, photo_url)
+  on listings to authenticated;
 
 -- ---------- Contact unlocks (pay-per-job, via Stripe) ----------
 -- Rows here are only ever written by the verify-collector Node app's service_role
@@ -217,9 +231,16 @@ create table job_assignments (
   collector_id uuid not null references profiles(id) on delete cascade,
   status assignment_status not null default 'accepted',
   accepted_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (listing_id) -- one active collector per listing at a time
+  updated_at timestamptz not null default now()
 );
+
+-- One *active* collector per listing at a time — scoped to non-cancelled rows (not a
+-- bare `unique (listing_id)`) so a cancelled assignment doesn't permanently deadlock its
+-- listing: sync_listing_status() below reopens a listing when its assignment is
+-- cancelled, and a plain unique constraint would then reject every future accept
+-- attempt by anyone, forever, since the old cancelled row still occupies the slot.
+create unique index one_active_assignment_per_listing
+  on job_assignments (listing_id) where status <> 'cancelled';
 
 alter table job_assignments enable row level security;
 
@@ -227,8 +248,35 @@ create policy "homeowners see assignments on their own listings"
   on job_assignments for select
   using (exists (select 1 from listings l where l.id = listing_id and l.homeowner_id = auth.uid()));
 
-create policy "collectors see & manage their own assignments"
-  on job_assignments for all
+create policy "collectors see their own assignments"
+  on job_assignments for select
+  using (auth.uid() = collector_id);
+
+-- Accepting a job requires actually having paid for it (or being Pro) AND being
+-- verified — split out from the update/select policies below so this check only
+-- applies at accept-time, not on every later status update by the same collector.
+create policy "collectors accept jobs they've unlocked, are Pro for, or are verified for"
+  on job_assignments for insert
+  with check (
+    auth.uid() = collector_id
+    and exists (
+      select 1 from collector_profiles cp
+      where cp.profile_id = auth.uid() and cp.verification_status = 'verified'
+    )
+    and (
+      exists (
+        select 1 from job_unlocks u
+        where u.listing_id = job_assignments.listing_id and u.collector_id = auth.uid()
+      )
+      or exists (
+        select 1 from pro_subscriptions p
+        where p.collector_id = auth.uid() and p.status in ('active', 'trialing')
+      )
+    )
+  );
+
+create policy "collectors update their own assignments"
+  on job_assignments for update
   using (auth.uid() = collector_id)
   with check (auth.uid() = collector_id);
 
@@ -265,15 +313,22 @@ alter table ratings enable row level security;
 
 create policy "ratings are readable by anyone signed in"
   on ratings for select using (auth.uid() is not null);
+-- ratee_id must be the *specific* counter-party on the assignment (not just "some
+-- participant") and never the rater themselves — otherwise a participant could rate
+-- themselves and inflate their own average via the trigger below.
 create policy "participants can rate each other on their own assignment"
   on ratings for insert
   with check (
     auth.uid() = rater_id
+    and ratee_id <> rater_id
     and exists (
       select 1 from job_assignments a
       join listings l on l.id = a.listing_id
       where a.id = assignment_id
-        and (a.collector_id = auth.uid() or l.homeowner_id = auth.uid())
+        and (
+          (a.collector_id = auth.uid() and ratee_id = l.homeowner_id)
+          or (l.homeowner_id = auth.uid() and ratee_id = a.collector_id)
+        )
     )
   );
 
