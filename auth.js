@@ -118,13 +118,19 @@ function scrapmanApplyRoleUI() {
   }
   document.querySelectorAll("[data-role]").forEach(el => {
     const allowed = el.dataset.role.split(" ");
-    // Not just "role is known and doesn't match" — while accounts are configured but
-    // the signed-in user's role hasn't resolved yet (or nobody's signed in at all),
-    // `role` is null here too, and `allowed.includes(null)` is false, so this still
-    // hides. Getting that wrong previously meant a visitor whose role wasn't known yet
-    // briefly saw BOTH homeowner and collector content merged together (e.g. the
-    // collector-only dashboard on the Home screen) instead of neither.
-    if (SCRAPMAN_AUTH_CONFIGURED && !allowed.includes(role)) el.classList.add("hidden");
+    if (!SCRAPMAN_AUTH_CONFIGURED) return;
+    if (role) {
+      // Role is known — hide anything that isn't for this role (e.g. a signed-in
+      // homeowner never sees the collector dashboard, and vice versa).
+      if (!allowed.includes(role)) el.classList.add("hidden");
+    } else if (!el.hasAttribute("data-public")) {
+      // Role not known yet — signed out, or the session check just hasn't resolved.
+      // Default to hiding role-gated content (e.g. the collector dashboard must never
+      // flash up for a signed-out visitor) UNLESS it's explicitly marked data-public —
+      // that's for landing-page content (hero CTAs, how-it-works, value props) that's
+      // meant to sell the app to a visitor *before* they've signed in or picked a role.
+      el.classList.add("hidden");
+    }
   });
   document.querySelectorAll("[data-signed-in-only]").forEach(el => {
     if (SCRAPMAN_AUTH_CONFIGURED && !scrapmanSession) el.classList.add("hidden");
