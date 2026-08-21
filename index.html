@@ -10,7 +10,7 @@
      only covers part of what .htaccess is meant to — remove it once the real headers
      are confirmed working (curl -sI, check for Content-Security-Policy) to avoid
      keeping two policies in sync. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com; connect-src 'self' https://bvfhcwfifjyododertvx.supabase.co wss://bvfhcwfifjyododertvx.supabase.co https://api.postcodes.io; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com; connect-src 'self' https://bvfhcwfifjyododertvx.supabase.co wss://bvfhcwfifjyododertvx.supabase.co https://api.postcodes.io https://unpkg.com; base-uri 'self'; form-action 'self'; object-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ScrapMan &mdash; Scrap collection, sorted</title>
 <meta name="description" content="Get scrap metal collected free from your doorstep. Snap a photo, list it in 30 seconds, and a vetted local collector comes to you. Smarter routes for scrap men.">

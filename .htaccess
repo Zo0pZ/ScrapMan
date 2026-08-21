@@ -7,7 +7,11 @@
   # used by every L.tileLayer(...) call) and unpkg (Leaflet's own marker-icon
   # PNGs, referenced from leaflet.css) — without these the map still loads, it
   # just renders as a blank grid with no tiles or pins.
-  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com; connect-src 'self' https://bvfhcwfifjyododertvx.supabase.co wss://bvfhcwfifjyododertvx.supabase.co https://api.postcodes.io; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
+  # connect-src also needs unpkg: with devtools open, the browser fetches
+  # leaflet.js's own sourcemap (leaflet.js.map) via fetch/XHR, which connect-src
+  # governs (not script-src) — otherwise harmless, but it throws a CSP violation
+  # in the console.
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com; connect-src 'self' https://bvfhcwfifjyododertvx.supabase.co wss://bvfhcwfifjyododertvx.supabase.co https://api.postcodes.io https://unpkg.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
 
   # HSTS: low initial max-age (1 day) per Google's own rollout guidance —
   # raise this over time once you're confident nothing on the domain needs
