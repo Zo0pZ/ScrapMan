@@ -78,7 +78,8 @@ function getCollector() {
   return cp ? {
     businessName: cp.business_name, carrierRef: cp.carrier_ref, smdCouncil: cp.smd_council,
     smdLicence: cp.smd_licence, status: cp.verification_status,
-    eaCarrier: cp.ea_carrier, eaScrapMetalLicence: cp.ea_scrap_metal_licence
+    eaCarrier: cp.ea_carrier, eaScrapMetalLicence: cp.ea_scrap_metal_licence,
+    ratingAvg: cp.rating_avg, ratingCount: cp.rating_count
   } : null;
 }
 function isVerified() { return getCollector()?.status === "verified"; }
@@ -560,11 +561,24 @@ async function getMyListings() {
   if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return [];
   const { data, error } = await scrapmanDb
     .from("listings")
-    .select("*, job_assignments(status, accepted_at, updated_at)")
+    .select("*, job_assignments(id, status, accepted_at, updated_at, collector_id, profiles(display_name))")
     .eq("homeowner_id", scrapmanSession.user.id)
     .order("created_at", { ascending: false });
   if (error) { console.error(error); return []; }
   return data || [];
+}
+
+// A homeowner's own submitted ratings, keyed by assignment_id — lets the listings
+// list show "you rated ★★★★☆" instead of the "Rate your collector" prompt once
+// they've already done it, without a separate query per listing.
+async function getMyRatings() {
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return new Map();
+  const { data, error } = await scrapmanDb
+    .from("ratings")
+    .select("assignment_id, stars")
+    .eq("rater_id", scrapmanSession.user.id);
+  if (error) { console.error(error); return new Map(); }
+  return new Map((data || []).map(r => [r.assignment_id, r.stars]));
 }
 
 const STATUS_DATE_VERB = { Pending: "Listed", Scheduled: "Scheduled", Collected: "Collected", Cancelled: "Cancelled" };
@@ -575,10 +589,14 @@ const STATUS_DATE_VERB = { Pending: "Listed", Scheduled: "Scheduled", Collected:
 function homeownerListingStatus(listing) {
   const embedded = listing.job_assignments;
   const assignment = (Array.isArray(embedded) ? embedded[0] : embedded) || null;
-  if (listing.status === "collected") return { label: "Collected", at: assignment && assignment.updated_at };
-  if (listing.status === "cancelled") return { label: "Cancelled", at: assignment && assignment.updated_at };
-  if (listing.status === "assigned") return { label: "Scheduled", at: assignment && assignment.accepted_at };
-  return { label: "Pending", at: listing.created_at };
+  if (listing.status === "collected") return { label: "Collected", at: assignment && assignment.updated_at, assignment };
+  if (listing.status === "cancelled") return { label: "Cancelled", at: assignment && assignment.updated_at, assignment };
+  if (listing.status === "assigned") return { label: "Scheduled", at: assignment && assignment.accepted_at, assignment };
+  return { label: "Pending", at: listing.created_at, assignment };
+}
+
+function renderStars(stars) {
+  return "&#9733;".repeat(stars) + "&#9734;".repeat(5 - stars);
 }
 
 function impactTierLabel(kg) {
@@ -603,20 +621,28 @@ function renderHomeownerImpact(listings) {
   `;
 }
 
-function renderMyListingsList(listings) {
+function renderMyListingsList(listings, myRatings) {
   const list = document.getElementById("myListingsList");
   if (!listings.length) {
     list.innerHTML = `<p class="job-meta">No listings yet — head to List to get your first collection booked.</p>`;
     return;
   }
   list.innerHTML = listings.map(l => {
-    const { label, at } = homeownerListingStatus(l);
+    const { label, at, assignment } = homeownerListingStatus(l);
     const dateLabel = at ? new Date(at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
     let actionHTML = "";
+    let metaExtra = "";
     if (label === "Pending") {
       actionHTML = l.is_boosted
         ? `<span class="tag boosted-tag">&#128640; Boosted</span>`
         : `<button class="add-btn" data-boost="${l.id}">Boost &mdash; &pound;1.99</button>`;
+    } else if (label === "Collected" && assignment) {
+      const collectorName = (assignment.profiles && assignment.profiles.display_name) || "your collector";
+      metaExtra = ` &middot; by ${esc(collectorName)}`;
+      const existingStars = myRatings && myRatings.get(assignment.id);
+      actionHTML = existingStars
+        ? `<span class="tag">You rated: ${renderStars(existingStars)}</span>`
+        : `<button class="add-btn" data-rate="${assignment.id}" data-collector-id="${assignment.collector_id}" data-collector-name="${esc(collectorName)}">Rate your collector</button>`;
     }
     return `
     <div class="job-card ${l.is_boosted ? "boosted" : ""}">
@@ -626,7 +652,7 @@ function renderMyListingsList(listings) {
         <p class="job-meta">${esc(l.address)}</p>
         <div class="job-tags">
           <span class="status-pill status-${label.toLowerCase()}">${label}</span>
-          ${dateLabel ? `<span class="tag">${STATUS_DATE_VERB[label]} ${esc(dateLabel)}</span>` : ""}
+          ${dateLabel ? `<span class="tag">${STATUS_DATE_VERB[label]} ${esc(dateLabel)}${metaExtra}</span>` : ""}
         </div>
         ${actionHTML ? `<div class="job-actions">${actionHTML}</div>` : ""}
       </div>
@@ -636,14 +662,84 @@ function renderMyListingsList(listings) {
 
 async function renderHomeownerListingsHub() {
   if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return;
-  const listings = await getMyListings();
+  const [listings, myRatings] = await Promise.all([getMyListings(), getMyRatings()]);
   renderHomeownerImpact(listings);
-  renderMyListingsList(listings);
+  renderMyListingsList(listings, myRatings);
 }
 
 document.getElementById("myListingsList").addEventListener("click", e => {
   const boostBtn = e.target.closest("[data-boost]");
-  if (boostBtn) startBoost(Number(boostBtn.dataset.boost));
+  if (boostBtn) { startBoost(Number(boostBtn.dataset.boost)); return; }
+  const rateBtn = e.target.closest("[data-rate]");
+  if (rateBtn) {
+    startRating(Number(rateBtn.dataset.rate), rateBtn.dataset.collectorId, rateBtn.dataset.collectorName);
+  }
+});
+
+/* ---------- rate your collector (homeowner, on a Collected listing) ---------- */
+let pendingRatingAssignmentId = null;
+let pendingRatingCollectorId = null;
+let selectedRatingStars = 0;
+
+function paintStars(upTo) {
+  document.querySelectorAll("#starPicker .star-btn").forEach(btn => {
+    btn.classList.toggle("selected", Number(btn.dataset.star) <= upTo);
+  });
+}
+
+document.querySelectorAll("#starPicker .star-btn").forEach(btn => {
+  btn.addEventListener("mouseenter", () => paintStars(Number(btn.dataset.star)));
+  btn.addEventListener("mouseleave", () => paintStars(selectedRatingStars));
+  btn.addEventListener("click", () => {
+    selectedRatingStars = Number(btn.dataset.star);
+    paintStars(selectedRatingStars);
+  });
+});
+
+function startRating(assignmentId, collectorId, collectorName) {
+  pendingRatingAssignmentId = assignmentId;
+  pendingRatingCollectorId = collectorId;
+  selectedRatingStars = 0;
+  paintStars(0);
+  document.getElementById("rateCollectorName").textContent = `How was your collection with ${collectorName || "your collector"}?`;
+  document.getElementById("rateComment").value = "";
+  document.getElementById("rateStatus").classList.add("hidden");
+  const btn = document.getElementById("submitRatingBtn");
+  btn.disabled = false;
+  btn.textContent = "Submit rating";
+  openSheet("overlay-rate");
+}
+
+document.getElementById("submitRatingBtn").addEventListener("click", async () => {
+  if (pendingRatingAssignmentId == null) return;
+  const statusEl = document.getElementById("rateStatus");
+  if (!selectedRatingStars) {
+    statusEl.textContent = "Pick a star rating first.";
+    statusEl.className = "demo-note status-error";
+    statusEl.classList.remove("hidden");
+    return;
+  }
+  const btn = document.getElementById("submitRatingBtn");
+  btn.disabled = true;
+  btn.textContent = "Submitting…";
+  const { error } = await scrapmanDb.from("ratings").insert({
+    assignment_id: pendingRatingAssignmentId,
+    rater_id: scrapmanSession.user.id,
+    ratee_id: pendingRatingCollectorId,
+    stars: selectedRatingStars,
+    comment: document.getElementById("rateComment").value.trim() || null
+  });
+  btn.disabled = false;
+  btn.textContent = "Submit rating";
+  if (error) {
+    statusEl.textContent = "Couldn't submit your rating — please try again.";
+    statusEl.className = "demo-note status-error";
+    statusEl.classList.remove("hidden");
+    console.error(error);
+    return;
+  }
+  closeSheet();
+  renderHomeownerListingsHub();
 });
 
 let pendingBoostId = null;
@@ -1330,33 +1426,46 @@ function rateForMetalType(type, table) {
 }
 
 async function fetchCollectorJobHistory() {
-  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return { all: [], lifetime: 0, thisWeek: 0, recent: [] };
+  const empty = { all: [], today: 0, thisWeek: 0, thisMonth: 0, lifetime: 0, recent: [] };
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return empty;
   const { data, error } = await scrapmanDb
     .from("job_assignments")
     .select("updated_at, listings(title, address, metal_type, weight_band)")
     .eq("collector_id", scrapmanSession.user.id)
     .eq("status", "completed")
     .order("updated_at", { ascending: false });
-  if (error) { console.error(error); return { all: [], lifetime: 0, thisWeek: 0, recent: [] }; }
+  if (error) { console.error(error); return empty; }
   const all = data || [];
 
-  const startOfWeek = new Date();
+  const now = new Date();
+  const startOfDay = new Date(now);
+  startOfDay.setHours(0, 0, 0, 0);
+  const startOfWeek = new Date(now);
   const mondayOffset = (startOfWeek.getDay() + 6) % 7; // getDay(): Sun=0 ... Sat=6 -> Monday-indexed
   startOfWeek.setHours(0, 0, 0, 0);
   startOfWeek.setDate(startOfWeek.getDate() - mondayOffset);
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
   return {
     all,
     lifetime: all.length,
+    today: all.filter(a => new Date(a.updated_at) >= startOfDay).length,
     thisWeek: all.filter(a => new Date(a.updated_at) >= startOfWeek).length,
+    thisMonth: all.filter(a => new Date(a.updated_at) >= startOfMonth).length,
     recent: all.slice(0, 5)
   };
 }
 
 function renderJobHistoryUI(history) {
+  const c = getCollector();
+  document.getElementById("collectorRatingBadge").innerHTML = c && c.ratingCount
+    ? `&#9733; ${Number(c.ratingAvg).toFixed(1)} &middot; ${c.ratingCount} review${c.ratingCount === 1 ? "" : "s"}`
+    : "No ratings yet";
   document.getElementById("jobHistoryStats").innerHTML = `
-    <div class="stat-box"><strong>${history.lifetime}</strong><span>Total completed</span></div>
-    <div class="stat-box save"><strong>${history.thisWeek}</strong><span>This week</span></div>
+    <div class="stat-box"><strong>${history.today}</strong><span>Today</span></div>
+    <div class="stat-box"><strong>${history.thisWeek}</strong><span>This week</span></div>
+    <div class="stat-box"><strong>${history.thisMonth}</strong><span>This month</span></div>
+    <div class="stat-box save"><strong>${history.lifetime}</strong><span>All time</span></div>
   `;
   document.getElementById("jobHistoryList").innerHTML = history.recent.length
     ? history.recent.map(r => {

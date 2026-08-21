@@ -331,7 +331,7 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
 .stack-form { display: flex; flex-direction: column; gap: 16px; }
 .field { display: flex; flex-direction: column; gap: 6px; font-weight: 700; font-size: 0.85rem; }
 .field input[type="text"], .field input[type="email"], .field input[type="password"],
-.field input[type="tel"], .field input[type="number"], .field select {
+.field input[type="tel"], .field input[type="number"], .field select, .field textarea {
   border: 1.5px solid var(--color-border);
   border-radius: 10px;
   padding: 12px 12px;
@@ -342,8 +342,9 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
   color: var(--color-foreground);
   transition: border-color var(--transition);
 }
+.field textarea { font-family: inherit; resize: vertical; }
 .field input[type="text"]:focus, .field input[type="email"]:focus, .field input[type="password"]:focus,
-.field input[type="tel"]:focus, .field input[type="number"]:focus, .field select:focus {
+.field input[type="tel"]:focus, .field input[type="number"]:focus, .field select:focus, .field textarea:focus {
   border-color: var(--color-accent);
   outline: none;
   box-shadow: 0 0 0 3px var(--color-accent-soft);
@@ -494,11 +495,12 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
 .hidden { display: none !important; }
 .route-stats {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 16px;
 }
 .stat-box {
-  flex: 1;
+  flex: 1 1 90px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -705,6 +707,15 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
 .sheet-sub { margin: 0; color: var(--color-muted-foreground); font-size: 0.88rem; line-height: 1.5; }
 .sheet .demo-note { margin-bottom: 0; }
 .sheet .link-btn { align-self: center; }
+
+/* STAR PICKER (rate your collector) */
+.star-picker { display: flex; gap: 4px; }
+.star-btn {
+  background: none; border: none; padding: 4px; font-size: 1.9rem; line-height: 1;
+  color: var(--color-border); cursor: pointer;
+  transition: color var(--transition), transform 0.08s ease;
+}
+.star-btn.selected { color: var(--color-accent); transform: scale(1.08); }
 
 /* CONTACT BLOCK (unlocked job) */
 .contact-block {

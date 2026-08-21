@@ -182,7 +182,10 @@
         </section>
 
         <section class="dash-section" id="jobHistorySection">
-          <h2 class="dash-title">Your activity</h2>
+          <div class="dash-section-head">
+            <h2 class="dash-title">Your activity</h2>
+            <span class="badge-verified" id="collectorRatingBadge"></span>
+          </div>
           <div class="route-stats" id="jobHistoryStats"></div>
           <div class="job-history-list" id="jobHistoryList"></div>
         </section>
@@ -658,6 +661,28 @@
       <p class="sheet-sub">One-off &pound;1.99 &mdash; moves your listing to the top of nearby collectors' feeds with a highlighted badge, so it gets picked up faster.</p>
       <p class="demo-note">You'll be taken to Stripe's secure checkout to pay, then brought straight back here.</p>
       <button class="cta cta-primary full-width" id="boostBtn">Boost &mdash; &pound;1.99</button>
+      <button class="link-btn sheet-close">Cancel</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay-rate">
+    <div class="sheet">
+      <span class="sheet-handle" aria-hidden="true"></span>
+      <h3>Rate your collector</h3>
+      <p class="sheet-sub" id="rateCollectorName"></p>
+      <div class="star-picker" id="starPicker">
+        <button type="button" class="star-btn" data-star="1" aria-label="1 star">&#9733;</button>
+        <button type="button" class="star-btn" data-star="2" aria-label="2 stars">&#9733;</button>
+        <button type="button" class="star-btn" data-star="3" aria-label="3 stars">&#9733;</button>
+        <button type="button" class="star-btn" data-star="4" aria-label="4 stars">&#9733;</button>
+        <button type="button" class="star-btn" data-star="5" aria-label="5 stars">&#9733;</button>
+      </div>
+      <label class="field">
+        <span>Comment (optional)</span>
+        <textarea id="rateComment" rows="3" placeholder="How did it go?"></textarea>
+      </label>
+      <p class="demo-note hidden" id="rateStatus"></p>
+      <button class="cta cta-primary full-width" id="submitRatingBtn">Submit rating</button>
       <button class="link-btn sheet-close">Cancel</button>
     </div>
   </div>
