@@ -5,7 +5,11 @@
   --color-on-primary: #ffffff;
 
   --color-accent: #ff6b00;           /* safety amber — primary actions & active states only */
-  --color-accent-dark: #e05f00;      /* amber hover/pressed */
+  --color-accent-dark: #b34a00;      /* amber hover/pressed, and small-text-on-tint (eyebrow,
+                                         active tab, status pills) — darkened from #e05f00 so
+                                         that text use clears WCAG AA 4.5:1 on both white/surface
+                                         (was ~3.6:1, now ~5.4:1) and --color-accent-soft (was
+                                         ~3.3:1, now ~4.9:1); still reads as the same amber hue */
   --color-accent-soft: #fff1e6;      /* amber tint background */
   --color-on-accent: #12161a;        /* ink used on amber fills — never white-on-amber */
 
@@ -714,7 +718,7 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
   background: var(--color-surface);
   color: var(--color-foreground);
 }
-.msg-input-row input:focus { border-color: var(--color-accent); outline: none; }
+.msg-input-row input:focus { border-color: var(--color-accent); outline: none; box-shadow: 0 0 0 3px var(--color-accent-soft); }
 .msg-input-row .cta { padding: 10px 18px; }
 
 /* IOS INSTALL STEPS */
