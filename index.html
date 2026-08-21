@@ -142,7 +142,11 @@
       </div>
 
       <!-- COLLECTOR SUBSCRIBER DASHBOARD -->
-      <div class="collector-dashboard" data-role="collector" id="collectorDashboard">
+      <!-- Starts hidden (not just role-gated) so it never flashes up on load before
+           scrapmanApplyRoleUI() has resolved whether the visitor is actually a
+           collector — that resolution is an async Supabase call, so on first paint the
+           role is briefly unknown even for a signed-in collector. -->
+      <div class="collector-dashboard hidden" data-role="collector" id="collectorDashboard">
 
         <section class="dash-section" id="materialFeedSection">
           <div class="dash-section-head">
@@ -513,19 +517,19 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-5h4v5h3a1 1 0 0 0 1-1v-9"/></svg>
       Home
     </button>
-    <button class="tab" data-nav="list" data-role="homeowner">
+    <button class="tab hidden" data-nav="list" data-role="homeowner">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h1.2l.9-1.5A2 2 0 0 1 9.8 3.5h4.4a2 2 0 0 1 1.7 1l.9 1.5H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><circle cx="12" cy="13" r="3.5"/></svg>
       List
     </button>
-    <button class="tab needs-backend" data-nav="track" data-role="homeowner">
+    <button class="tab needs-backend hidden" data-nav="track" data-role="homeowner">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5v-9Z"/><path d="M3.5 7.5 12 12l8.5-4.5"/><path d="M12 12v9"/></svg>
       Listings
     </button>
-    <button class="tab" data-nav="jobs" data-role="collector">
+    <button class="tab hidden" data-nav="jobs" data-role="collector">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5v-9Z"/><path d="M3.5 7.5 12 12l8.5-4.5"/><path d="M12 12v9"/></svg>
       Jobs
     </button>
-    <button class="tab" data-nav="route" data-role="collector">
+    <button class="tab hidden" data-nav="route" data-role="collector">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
       Route
     </button>
