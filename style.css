@@ -550,12 +550,40 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
   background: var(--color-accent); color: var(--color-on-accent); font-size: 0.68rem; font-weight: 800;
   padding: 4px 10px; border-radius: 999px; text-transform: uppercase;
 }
-.extras { margin-top: 6px; }
-.extra-row {
-  display: flex; justify-content: space-between; padding: 10px 4px;
-  border-bottom: 1px solid var(--color-border); font-size: 0.85rem;
+/* PRICING GROUPS — Free/Boost for homeowners, Pay-per-job/Pro/Verified for
+   collectors, grouped so a signed-out visitor (who sees both, per data-public) can
+   tell at a glance which side of the page is theirs. A signed-in user only ever sees
+   their own group (existing data-role gating, unchanged), so this reads as a plain
+   single pricing list for them, same as before. */
+.pricing-group { margin-bottom: 22px; }
+.pricing-group-title {
+  font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--color-muted-foreground); margin: 0 0 10px;
 }
-.extra-row:last-child { border-bottom: none; }
+
+.addon-card {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.addon-icon {
+  width: 40px; height: 40px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-dark);
+  border-radius: var(--radius-sm);
+}
+.addon-icon svg { width: 20px; height: 20px; }
+.addon-body { flex: 1; min-width: 0; }
+.addon-body h4 { margin: 0 0 2px; font-size: 0.92rem; }
+.addon-body p { margin: 0; color: var(--color-muted-foreground); font-size: 0.8rem; line-height: 1.4; }
+.addon-price {
+  flex-shrink: 0; text-align: right; white-space: nowrap;
+  font-family: var(--font-display); font-weight: 800; font-size: 0.95rem;
+}
+.addon-price small { display: block; font-weight: 500; font-size: 0.68rem; color: var(--color-muted-foreground); font-family: var(--font-sans); }
 
 /* TAB BAR */
 .tab-bar {
@@ -871,8 +899,10 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
      scoping to .active keeps this display:grid conditional on the same class
      goTo() already toggles. */
   .value-props { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 20px; align-items: start; }
-  #screen-pricing.active { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px 14px; align-items: start; }
-  #screen-pricing > .screen-title, #screen-pricing > .screen-sub, #screen-pricing > .extras { grid-column: 1 / -1; }
+  /* Each .pricing-group (not individual price-cards) is a column here — collapses to
+     one column automatically when only one group is visible (a signed-in user). */
+  #screen-pricing.active { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px 24px; align-items: start; }
+  #screen-pricing > .screen-title, #screen-pricing > .screen-sub { grid-column: 1 / -1; }
 
   .material-feed { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); overflow-x: visible; }
 
