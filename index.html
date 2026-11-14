@@ -52,6 +52,10 @@
       <span class="brand-name">Scrap<span class="accent">Man</span></span>
     </div>
     <div class="header-actions">
+      <button class="icon-btn notif-bell" id="notifBell" aria-label="Notifications">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>
+        <span class="notif-dot" id="notifDot" hidden>0</span>
+      </button>
       <button class="icon-btn" data-nav="messages" aria-label="Messages">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 6h16v11a1 1 0 0 1-1 1H8l-4 3V6Z"/><path d="M8 10h8M8 13.5h5"/>
@@ -555,6 +559,16 @@
         </div>
       </div>
 
+      <div class="account-card" id="accAlerts" data-role="collector">
+        <div class="toggle-row">
+          <div><strong>New job alerts</strong><span>Tell me when a job appears in my area</span></div>
+          <label class="switch"><input type="checkbox" id="notifyNewJobs"><span></span></label>
+        </div>
+        <label class="field"><span>Alert radius (miles)</span><input type="number" id="serviceRadius" min="1" max="100" step="1" value="10" inputmode="numeric"></label>
+        <button class="add-btn" id="saveServiceArea" type="button">Save my alert area</button>
+        <button class="add-btn" id="enablePushBtn" type="button">Turn on device alerts</button>
+        <p class="demo-note hidden" id="alertsStatus"></p>
+      </div>
       <div class="account-card" id="accVerify" data-role="collector"></div>
       <div class="account-card" id="accPro" data-role="collector"></div>
 
@@ -686,6 +700,46 @@
       <button class="link-btn sheet-close">Cancel</button>
     </div>
   </div>
+
+  <div class="overlay" id="overlay-notifications">
+    <div class="sheet">
+      <span class="sheet-handle" aria-hidden="true"></span>
+      <h3>Notifications</h3>
+      <p class="sheet-sub">New jobs near you, collections confirmed, and disputes.</p>
+      <div class="notif-list" id="notificationList"></div>
+      <button class="link-btn" id="markAllRead" type="button">Mark all as read</button>
+      <button class="link-btn sheet-close">Close</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay-proof">
+    <div class="sheet">
+      <span class="sheet-handle" aria-hidden="true"></span>
+      <h3>Record collection</h3>
+      <p class="sheet-sub" id="proofTitle">Confirm what you collected.</p>
+      <label class="field"><span>Weight collected (kg)</span><input type="number" id="proofWeight" inputmode="decimal" min="1" max="50000" step="0.1" placeholder="e.g. 42"></label>
+      <label class="field"><span>How was the household paid?</span><select id="proofPayment"></select></label>
+      <label class="field"><span>Note (optional)</span><input type="text" id="proofNote" maxlength="200" placeholder="e.g. weighed at yard, ticket 8841"></label>
+      <label class="field"><span>Photo of the load (optional)</span><input type="file" id="proofPhoto" accept="image/*"></label>
+      <p class="demo-note hidden" id="proofError"></p>
+      <button class="cta cta-primary full-width" id="proofSubmit" type="button">Record collection</button>
+      <button class="link-btn" id="proofCancel" type="button">Cancel</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay-dispute">
+    <div class="sheet">
+      <span class="sheet-handle" aria-hidden="true"></span>
+      <h3>Dispute a collection</h3>
+      <p class="sheet-sub" id="disputeTitle">Tell us what went wrong.</p>
+      <label class="field"><span>What happened?</span><textarea id="disputeReason" rows="4" placeholder="Wrong weight, nobody turned up, damage to my property…"></textarea></label>
+      <p class="demo-note hidden" id="disputeError"></p>
+      <button class="cta cta-primary full-width" id="disputeSubmit" type="button">Raise dispute</button>
+      <button class="link-btn" id="disputeCancel" type="button">Cancel</button>
+    </div>
+  </div>
+
+  <div id="printRoot" aria-hidden="true"></div>
 
   <div class="overlay" id="overlay-forgotPassword">
     <div class="sheet">
