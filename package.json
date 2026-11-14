@@ -1,0 +1,18 @@
+{
+  "name": "scrapman",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ScrapMan — UK scrap collection marketplace. Static PWA frontend plus the verify-collector Node service (see verify-collector/package.json).",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test",
+    "check:sw": "node scripts/check-sw-assets.js",
+    "verify": "npm run lint && npm run typecheck && npm run check:sw && npm test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {}
+}
