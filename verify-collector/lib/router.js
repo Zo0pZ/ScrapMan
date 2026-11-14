@@ -34,9 +34,17 @@ function endsWithPath(pathname, suffix) {
   return pathname === suffix || pathname.endsWith(suffix);
 }
 
-/* Routes, most specific first. `jsonBody` marks handlers that need a parsed JSON
-   body; `rawBody` marks the Stripe webhook, which needs the untouched bytes so the
-   signature can be verified. */
+/**
+ * @typedef {object} Route
+ * @property {string} name      Handler key the server switches on.
+ * @property {string} path      Suffix to match against the request pathname.
+ * @property {string[]} methods HTTP methods this route accepts.
+ * @property {boolean} [jsonBody] Handler wants a parsed JSON body.
+ * @property {boolean} [rawBody] Handler wants the untouched bytes (Stripe webhook).
+ */
+
+/* Routes, most specific first. */
+/** @type {Route[]} */
 const ROUTES = [
   { name: "webhook", path: "/webhook", methods: ["POST"], rawBody: true },
   { name: "metal-prices", path: "/metal-prices", methods: ["GET"] },
@@ -53,10 +61,10 @@ const ROUTES = [
 
 /**
  * Find the route for a request.
- * @param {Array<object>} routes
+ * @param {Route[]} routes
  * @param {string} method
  * @param {string} pathname
- * @returns {{route: object|null, methodMismatch: boolean}} methodMismatch lets the
+ * @returns {{route: Route|null, methodMismatch: boolean}} methodMismatch lets the
  *   caller answer 405 (path exists, method doesn't) rather than 404.
  */
 function matchRoute(routes, method, pathname) {
