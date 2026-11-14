@@ -28,7 +28,7 @@
  * @param {Date|string} [when] collection timestamp — a Date, or the ISO string PostgREST returns
  */
 export function transferNoteReference(listingId, when = new Date()) {
-  const id = Number.parseInt(listingId, 10)
+  const id = Number.parseInt(String(listingId), 10)
   if (!Number.isFinite(id) || id <= 0) return ""
   const date = when instanceof Date ? when : new Date(when)
   if (Number.isNaN(date.getTime())) return ""
