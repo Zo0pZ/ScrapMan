@@ -469,6 +469,7 @@ a, button, .tab, .chip, .pill, .add-btn, .icon-btn, .link-btn {
 .job-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 .tag { background: var(--color-muted); border-radius: 999px; padding: 3px 9px; font-size: 0.72rem; font-weight: 700; color: var(--color-muted-foreground); }
 .tag.urgent { background: var(--color-urgent-bg); color: var(--color-urgent-text); }
+.tag.tag-warning { background: var(--color-urgent-bg); color: var(--color-urgent-text); border: 1px solid var(--color-urgent-text); }
 .tag.boosted-tag { background: var(--color-urgent-text); color: var(--color-urgent-bg); }
 
 /* STATUS PILL (homeowner listing history) */

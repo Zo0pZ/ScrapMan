@@ -73,7 +73,7 @@ function createLimiterSet(rules = {}, options = {}) {
 
   function limiterFor(name) {
     if (!limiters.has(name)) {
-      limiters.set(name, createRateLimiter({ ...DEFAULT_RULE, ...(rules[name] || {}) }, options));
+      limiters.set(name, createRateLimiter({ ...DEFAULT_RULE, ...(rules[name] || {}), ...options }));
     }
     return limiters.get(name);
   }
