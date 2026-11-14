@@ -1,4 +1,4 @@
-const CACHE = "scrapman-v18";
+const CACHE = "scrapman-v19";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,6 +7,10 @@ const ASSETS = [
   "./supabase-config.js",
   "./auth.js",
   "./app.js",
+  "./src/domain/labels.js",
+  "./src/domain/rates.js",
+  "./src/domain/routing.js",
+  "./src/data/listings.js",
   "./manifest.json",
   "./scrapman-logo-icon-only.svg",
   "./scrapman-logo-icon-only-mark.svg",

@@ -15,6 +15,7 @@
   },
   "include": [
     "src/**/*.js",
+    "test/**/*.js",
     "scripts/**/*.js",
     "verify-collector/lib/**/*.js",
     "verify-collector/test/**/*.js"

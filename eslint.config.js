@@ -59,7 +59,7 @@ export default [
   },
   {
     // Refactored browser modules.
-    files: ["src/**/*.js", "scripts/**/*.js", "eslint.config.js"],
+    files: ["src/**/*.js", "test/**/*.js", "scripts/**/*.js", "eslint.config.js"],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: "module",
@@ -106,6 +106,26 @@ export default [
       "no-unused-vars": "off",
       "no-dupe-keys": "error",
       "no-unreachable": "error"
+    }
+  },
+  {
+    // app.js is loaded as an ES module (index.html uses type="module") while it is being
+    // split into src/. It is parsed as a module so `import` is valid, but stays exempt from
+    // no-undef/no-unused-vars until the split finishes and src/main.js replaces it.
+    files: ["app.js"],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: "module",
+      globals: { ...browserGlobals, self: "readonly" }
+    },
+    rules: {
+      "no-undef": "off",
+      "no-unused-vars": "off",
+      "no-dupe-keys": "error",
+      "no-unreachable": "error",
+      "no-redeclare": "error",
+      eqeqeq: ["error", "smart"],
+      "prefer-const": "error"
     }
   }
 ];
