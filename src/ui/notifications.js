@@ -226,7 +226,7 @@ export async function enablePushNotifications() {
   const userId = signedInUserId();
   if (!SCRAPMAN_AUTH_CONFIGURED || !userId) return { ok: false, reason: "Sign in first." };
 
-  const permission = await Notification.requestPermission();
+  const permission = await window.Notification.requestPermission();
   if (permission !== "granted") return { ok: false, reason: "Notifications are blocked in your browser settings." };
 
   const registration = await navigator.serviceWorker.ready;
