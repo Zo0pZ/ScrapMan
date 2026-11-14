@@ -38,45 +38,30 @@
  * DOMAIN, PORT.
  *
  * Routing note: cPanel's Node app proxy may or may not strip the mount path
- * (e.g. "/verify-collector") before it reaches this process, so every route below
- * is matched by *suffix* rather than assuming an exact pathname — that way it works
- * the same whether req.url arrives as "/create-checkout-session" or
- * "/verify-collector/create-checkout-session". Anything that matches none of the
- * known suffixes falls through to the original verification handler, which is what
- * every request used to hit anyway (it never looked at the path at all).
+ * (e.g. "/verify-collector") before it reaches this process, so routes are matched
+ * by *suffix* (see lib/router.js) rather than assuming an exact pathname — that way
+ * it works the same whether req.url arrives as "/create-checkout-session" or
+ * "/verify-collector/create-checkout-session". An unmatched path is now a 404; it
+ * used to fall through to the verification handler, which answered *every* URL.
  */
 
 require("dotenv").config();
 const http = require("http");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
+/* Pure helpers, the route table and HTTP plumbing live in ./lib — see lib/verification.js
+   (EA matching rules), lib/router.js (suffix routing + 404/405), lib/http.js and
+   lib/stripe-helpers.js. They are imported rather than inlined so they can be unit-tested
+   without starting a server or reaching Stripe/the EA register. */
+const { normalizeCouncilName, cleanRegNumber, isExpired } = require("./lib/verification");
+const { ROUTES, matchRoute, normalizePathname, HttpError } = require("./lib/router");
+const { CORS_HEADERS, sendJSON, readJSONBody, readRawBody } = require("./lib/http");
+const { subscriptionPeriodEnd } = require("./lib/stripe-helpers");
+
 const PRO_BASE = "https://environment.data.gov.uk/public-register";
-const COUNCIL_SUFFIXES = /\s*(city|metropolitan|borough|district|unitary|county)?\s*council\s*$/i;
 
 const METALS_API_BASE = "https://api.metals.dev/v1";
 const METAL_PRICE_CACHE_MS = 24 * 60 * 60 * 1000; // 1 day — matches the "updated daily" the dashboard promises
-
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization"
-};
-
-function normalizeCouncilName(name) {
-  return String(name || "").replace(COUNCIL_SUFFIXES, "").trim();
-}
-
-function cleanRegNumber(value) {
-  return String(value || "").trim().toUpperCase().replace(/[\s\-\/]+/g, "");
-}
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function isExpired(expiryDate) {
-  return !!expiryDate && expiryDate < todayISO();
-}
 
 async function proFetch(path, params) {
   const url = new URL(`${PRO_BASE}${path}`);
@@ -503,31 +488,9 @@ async function handleWebhook(req, res) {
   res.end("{}");
 }
 
-/* ---------- plumbing ---------- */
-
-function readJSONBody(req) {
-  return new Promise((resolve, reject) => {
-    let body = "";
-    req.on("data", chunk => {
-      body += chunk;
-      if (body.length > 1e6) req.destroy(); // guard against absurdly large bodies
-    });
-    req.on("end", () => {
-      try { resolve(body ? JSON.parse(body) : {}); }
-      catch (err) { reject(err); }
-    });
-    req.on("error", reject);
-  });
-}
-
-function sendJSON(res, statusCode, payload) {
-  res.writeHead(statusCode, { "Content-Type": "application/json", ...CORS_HEADERS });
-  res.end(JSON.stringify(payload));
-}
-
-function endsWithPath(pathname, suffix) {
-  return pathname === suffix || pathname.endsWith(suffix);
-}
+/* ---------- plumbing ----------
+   sendJSON / readJSONBody / readRawBody now live in lib/http.js, and route matching
+   (including the suffix matching cPanel's proxy needs) in lib/router.js. */
 
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
@@ -535,53 +498,59 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
-  const { pathname } = new URL(req.url, `http://${req.headers.host}`);
+  const { pathname, searchParams } = new URL(req.url, `http://${req.headers.host}`);
+  const { route, methodMismatch } = matchRoute(ROUTES, req.method, pathname);
 
-  // Webhook needs the raw, unparsed body for signature verification — handle it before
-  // anything else touches the request stream.
-  if (req.method === "POST" && endsWithPath(pathname, "/webhook")) {
+  if (!route) {
+    // Unknown paths are a 404 now. The old fallback answered them with an Environment
+    // Agency verification verdict, which hid broken URLs and spent an outbound request
+    // on every typo. A path that exists with the wrong method is a 405 instead.
+    return sendJSON(res, methodMismatch ? 405 : 404, {
+      error: methodMismatch
+        ? `${req.method} is not allowed on ${normalizePathname(pathname)}`
+        : `No route for ${normalizePathname(pathname)}`
+    });
+  }
+
+  // The webhook needs the raw, unparsed body for signature verification, so it is
+  // dispatched before anything else touches the request stream.
+  if (route.rawBody) {
     try { return await handleWebhook(req, res); }
     catch (err) { return sendJSON(res, 500, { error: String(err.message || err) }); }
   }
 
-  if (req.method !== "GET" && req.method !== "POST") {
-    return sendJSON(res, 405, { error: "Use GET or POST" });
-  }
-
   try {
-    if (req.method === "GET" && endsWithPath(pathname, "/metal-prices")) {
-      return await handleMetalPrices(req, res);
-    }
-    if (req.method === "POST" && endsWithPath(pathname, "/create-checkout-session")) {
-      return await handleCreateUnlockSession(req, res, await readJSONBody(req));
-    }
-    if (req.method === "POST" && endsWithPath(pathname, "/create-subscription-session")) {
-      return await handleCreateProSession(req, res);
-    }
-    if (req.method === "POST" && endsWithPath(pathname, "/create-boost-session")) {
-      return await handleCreateBoostSession(req, res, await readJSONBody(req));
-    }
-    if (req.method === "POST" && endsWithPath(pathname, "/submit-verification")) {
-      return await handleSubmitVerification(req, res, await readJSONBody(req));
-    }
-    if (req.method === "POST" && endsWithPath(pathname, "/customer-portal")) {
-      return await handleCustomerPortal(req, res);
+    const body = route.jsonBody ? await readJSONBody(req) : {};
+
+    switch (route.name) {
+      case "metal-prices": return await handleMetalPrices(req, res);
+      case "create-unlock-session": return await handleCreateUnlockSession(req, res, body);
+      case "create-pro-session": return await handleCreateProSession(req, res);
+      case "create-boost-session": return await handleCreateBoostSession(req, res, body);
+      case "submit-verification": return await handleSubmitVerification(req, res, body);
+      case "customer-portal": return await handleCustomerPortal(req, res);
+      case "verify": {
+        const params = req.method === "POST" ? body : Object.fromEntries(searchParams);
+        return await handleVerify(req, res, params);
+      }
+      default: return sendJSON(res, 404, { error: "No route" });
     }
   } catch (err) {
+    // A malformed body, or a handler rejecting the request, is a 4xx. Only genuine
+    // upstream failures (Stripe, Supabase, the EA register) deserve a 502 — the old
+    // blanket catch reported validation errors as 502, which read as an outage.
+    if (err instanceof SyntaxError) {
+      return sendJSON(res, 400, { error: "Invalid JSON body" });
+    }
+    if (err instanceof HttpError) {
+      return sendJSON(res, err.status, { error: err.message });
+    }
+    if (err && err.status >= 400 && err.status < 500) {
+      return sendJSON(res, err.status, { error: String(err.message || err) });
+    }
+    console.error(`request failed: ${req.method} ${pathname}`, err);
     return sendJSON(res, 502, { error: "Stripe/Supabase request failed — try again shortly.", detail: String(err.message || err) });
   }
-
-  // Fallback: the original collector-verification handler. This intentionally ignores
-  // the path (it always has — every request used to land here regardless of URL).
-  let params;
-  try {
-    params = req.method === "POST"
-      ? await readJSONBody(req)
-      : Object.fromEntries(new URL(req.url, `http://${req.headers.host}`).searchParams);
-  } catch {
-    return sendJSON(res, 400, { error: "Invalid JSON body" });
-  }
-  return handleVerify(req, res, params);
 });
 
 const port = process.env.PORT || 3000;
