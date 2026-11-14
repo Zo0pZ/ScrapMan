@@ -13,12 +13,16 @@ import { renderJobs } from "./ui/jobs.js";
 import { personalizeCouncilLink } from "./ui/location.js";
 import { handleStripeReturn } from "./ui/payments.js";
 import { initHeroCarousel } from "./ui/navigation.js";
+import { initNotifications } from "./ui/notifications.js";
+import { initProofs } from "./ui/proofs.js";
 
 export function init() {
   renderJobs();
   personalizeCouncilLink();
   handleStripeReturn();
   initHeroCarousel();
+  initNotifications();
+  initProofs();
 
   // Unconfigured (demo) mode never fires scrapman:auth (see auth.js), so the normal trigger
   // for re-checking the carousel never happens either — DOMContentLoaded is what demo mode

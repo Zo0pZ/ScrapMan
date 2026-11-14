@@ -3,6 +3,8 @@ import { AVG_TIP_RUN_MILES, CAR_MPG, FUEL_PRICE_PER_LITRE, TIME_SAVED_MINUTES_PE
 import { TYPE_ICON } from "../domain/labels.js";
 import { openSheet, closeSheet } from "./navigation.js";
 import { startStripeCheckout } from "./payments.js";
+import { badgeProgress, formatKg } from "../domain/badges.js";
+import { openTransferNote, openDisputeSheet } from "./proofs.js";
 
 /* ---------- homeowner "My listings" hub: history, impact counters, boost ---------- */
 
@@ -51,7 +53,22 @@ export function renderStars(stars) {
 // Time/fuel/weight are all estimates — see the assumptions block near the top of this
 // file. mpg here means UK imperial miles-per-gallon (4.546 L/gal), same as the
 // collector ROI tracker's fuel figure.
-export function renderHomeownerImpact(listings) {
+/* Households get a recycling badge, deliberately not a star rating. The badge is built from
+ * the weights collectors actually recorded in job_proofs, so it rewards recycling instead of
+ * being a public opinion score attached to somebody's home address. */
+function householdBadgeHTML(badge) {
+  if (!badge) return "";
+  const progress = badgeProgress(badge.total_kg, badge.collections);
+  const next = progress.next
+    ? `<span class="badge-progress">${esc(formatKg(progress.kgToNext))} to ${esc(progress.next.label)}</span>`
+    : `<span class="badge-progress">Top tier &middot; thank you</span>`;
+  return `<div class="badge-row">
+      <span class="badge-chip tier-${progress.tier.key}">${esc(progress.tier.label)} &middot; ${esc(formatKg(progress.kg))}</span>
+      ${next}
+    </div>`;
+}
+
+export function renderHomeownerImpact(listings, badge) {
   const collected = listings.filter(l => l.status === "collected");
   const timeSavedMins = collected.length * TIME_SAVED_MINUTES_PER_COLLECTION;
   const timeSavedLabel = timeSavedMins >= 60 ? `${(timeSavedMins / 60).toFixed(1)} hrs` : `${timeSavedMins} min`;
@@ -60,6 +77,7 @@ export function renderHomeownerImpact(listings) {
   const kgDiverted = collected.reduce((sum, l) => sum + (WEIGHT_BAND_KG[l.weight_band] || WEIGHT_BAND_KG.medium), 0);
 
   document.getElementById("homeownerImpactStats").innerHTML = `
+    ${householdBadgeHTML(badge)}
     <div class="stat-box save"><strong>${timeSavedLabel}</strong><span>Time saved</span></div>
     <div class="stat-box save"><strong>&pound;${costSaved.toFixed(0)}</strong><span>Fuel &amp; cost saved</span></div>
     <div class="stat-box save"><strong>${kgDiverted.toFixed(0)} kg</strong><span>${impactTierLabel(kgDiverted)} &middot; diverted</span></div>
@@ -88,14 +106,17 @@ export function renderMyListingsList(listings, myRatings) {
       // stuck at "Scheduled" forever with no way to rate the collector afterwards.
       const collectorName = (assignment.profiles && assignment.profiles.display_name) || "your collector";
       metaExtra = ` &middot; ${esc(collectorName)}`;
-      actionHTML = `<button class="add-btn" data-mark-collected="${assignment.id}">Mark as collected</button>`;
+      actionHTML = `<button class="add-btn" data-mark-collected="${assignment.id}">Mark as collected</button>
+        <button class="add-btn" data-dispute="${assignment.id}">Nobody turned up?</button>`;
     } else if (label === "Collected" && assignment) {
       const collectorName = (assignment.profiles && assignment.profiles.display_name) || "your collector";
       metaExtra = ` &middot; by ${esc(collectorName)}`;
       const existingStars = myRatings && myRatings.get(assignment.id);
-      actionHTML = existingStars
+      actionHTML = (existingStars
         ? `<span class="tag">You rated: ${renderStars(existingStars)}</span>`
-        : `<button class="add-btn" data-rate="${assignment.id}" data-collector-id="${assignment.collector_id}" data-collector-name="${esc(collectorName)}">Rate your collector</button>`;
+        : `<button class="add-btn" data-rate="${assignment.id}" data-collector-id="${assignment.collector_id}" data-collector-name="${esc(collectorName)}">Rate your collector</button>`)
+        + `<button class="add-btn" data-transfer-note="${l.id}">Collection record</button>`
+        + `<button class="add-btn" data-dispute="${assignment.id}">Something wrong?</button>`;
     }
     return `
     <div class="job-card ${l.is_boosted ? "boosted" : ""}">
@@ -113,10 +134,17 @@ export function renderMyListingsList(listings, myRatings) {
   }).join("");
 }
 
+async function getHouseholdBadge() {
+  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return null;
+  const { data, error } = await scrapmanDb.rpc("household_badge", { p_homeowner: scrapmanSession.user.id });
+  if (error || !data || !data.length) return null;
+  return data[0];
+}
+
 export async function renderHomeownerListingsHub() {
   if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return;
-  const [listings, myRatings] = await Promise.all([getMyListings(), getMyRatings()]);
-  renderHomeownerImpact(listings);
+  const [listings, myRatings, badge] = await Promise.all([getMyListings(), getMyRatings(), getHouseholdBadge()]);
+  renderHomeownerImpact(listings, badge);
   renderMyListingsList(listings, myRatings);
 }
 
@@ -130,6 +158,16 @@ document.getElementById("myListingsList").addEventListener("click", e => {
   }
   const markCollectedBtn = e.target.closest("[data-mark-collected]");
   if (markCollectedBtn) markListingCollected(Number(markCollectedBtn.dataset.markCollected), markCollectedBtn);
+  const noteBtn = e.target.closest("[data-transfer-note]");
+  if (noteBtn) { openTransferNote(Number(noteBtn.dataset.transferNote)); return; }
+  const disputeBtn = e.target.closest("[data-dispute]");
+  if (disputeBtn) {
+    openDisputeSheet({
+      assignment_id: Number(disputeBtn.dataset.dispute),
+      title: "Something wrong with this collection"
+    });
+    return;
+  }
 });
 
 export async function markListingCollected(assignmentId, btn) {
