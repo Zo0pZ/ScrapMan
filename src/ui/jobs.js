@@ -132,11 +132,6 @@ export function contactBlockHTML(j) {
     </div>`;
 }
 
-/**
- * @param {any[]} [prefetched] rows the caller already loaded — pass them in so a screen
- *   that also needs the list for its map doesn't trigger a second listings query.
- */
-
 /* Household recycling badges for the job cards, fetched in one round trip. A collector is
  * being asked to pay to unlock a job, so the household's recycling record belongs on the
  * card — but a badge lookup failure must never stop the job list from rendering. */
@@ -158,6 +153,10 @@ function householdBadgeChip(kg) {
   return `<div class="badge-row"><span class="badge-chip tier-${tier.key}" title="Scrap this household has recycled through ScrapMan">${esc(tier.label)} &middot; ${esc(formatKg(kg))}</span></div>`;
 }
 
+/**
+ * @param {any[]} [prefetched] rows the caller already loaded — pass them in so a screen
+ *   that also needs the list for its map doesn't trigger a second listings query.
+ */
 export async function renderJobs(prefetched) {
   const list = document.getElementById("jobList");
   const allJobs = prefetched || await listings.openJobs();

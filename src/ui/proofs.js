@@ -50,7 +50,7 @@ export function openProofSheet(assignment) {
   if (title) title.textContent = pending.title || "Confirm collection";
 
   const payment = el("proofPayment");
-  if (payment && !payment.options.length) payment.innerHTML = paymentOptions();
+  if (payment && !payment.querySelectorAll("option").length) payment.innerHTML = paymentOptions();
 
   const weight = el("proofWeight");
   if (weight) weight.value = "";
@@ -222,7 +222,7 @@ export async function openTransferNote(listingId) {
   const note = data.payload && data.payload.reference ? data.payload : buildTransferNote(data);
   const root = el("printRoot");
   if (!root) return;
-  root.innerHTML = transferNoteHtml(note, { reference: data.reference, issuedAt: data.issued_at });
+  root.innerHTML = transferNoteHtml(note);
   document.body.classList.add("printing");
   window.print();
   window.setTimeout(() => document.body.classList.remove("printing"), 500);

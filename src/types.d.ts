@@ -92,4 +92,10 @@ interface Navigator {
 interface Window {
   /** Legacy IE/Edge check in isIOS(). */
   MSStream?: unknown;
+  /** Navigation helper published by src/ui/navigation.js — used by notification taps. */
+  scrapmanGoTo: (view: string) => void;
+  /** Re-renders the job list once a collection has been recorded. */
+  scrapmanRefreshJobs: () => void;
+  /** Web-push VAPID public key, injected by supabase-config.js when push is configured. */
+  SCRAPMAN_VAPID_PUBLIC_KEY: string;
 }
