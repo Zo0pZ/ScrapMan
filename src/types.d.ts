@@ -69,6 +69,8 @@ interface HTMLElement {
 interface Element {
   dataset: DOMStringMap;
   onclick: any;
+  value: string;
+  disabled: boolean;
 }
 
 interface EventTarget {
