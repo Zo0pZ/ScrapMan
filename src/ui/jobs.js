@@ -274,7 +274,6 @@ export async function renderRoute() {
     </div>
   ` : "");
 
-  const el = document.getElementById("routeMap");
   if (typeof L === "undefined") return; // stats + stop list above still render offline
   if (routeMap) { routeMap.remove(); routeMap = null; }
   routeMap = L.map("routeMap", { zoomControl: false, attributionControl: false }).setView([state.depot.lat, state.depot.lng], state.usingDefaultLocation ? 11 : 12);
