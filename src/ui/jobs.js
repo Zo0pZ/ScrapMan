@@ -245,7 +245,9 @@ export async function renderRoute() {
   const totalDist = ordered.reduce((sum, j) => sum + j.legDist, 0);
 
   // naive "as listed" order, for comparison
-  let naiveDist = 0, cur = state.depot;
+  let naiveDist = 0;
+  /** @type {{lat: number, lng: number}} */
+  let cur = state.depot;
   jobs.forEach(j => { naiveDist += haversine(cur, j); cur = j; });
 
   const avgSpeedMph = 25;

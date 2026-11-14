@@ -25,7 +25,7 @@ export function haversine(a, b) {
 
 /**
  * @typedef {{ lat: number, lng: number }} Point
- * @typedef {Point & { id?: any, legDist: number }} RouteStop
+ * @typedef {Point & { id?: any, legDist: number, title?: string, address?: string }} RouteStop
  */
 
 /**
