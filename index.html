@@ -747,8 +747,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js"></script>
 <script src="auth.js"></script>
-<!-- app.js is an ES module now (it imports src/domain/* and src/data/*). geo.js, supabase-config.js
-     and auth.js above stay classic scripts because they publish the globals the module reads. -->
-<script type="module" src="app.js"></script>
+<!-- src/main.js is the ES-module entry point; it imports src/state.js, src/ui/* and src/domain/*.
+     geo.js, supabase-config.js and auth.js above stay classic scripts because they publish the
+     globals those modules read (scrapmanDb, scrapmanSession, SCRAPMAN_AUTH_CONFIGURED, ...). -->
+<script type="module" src="src/main.js"></script>
 </body>
 </html>

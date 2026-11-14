@@ -53,6 +53,41 @@ const browserGlobals = {
   clearInterval: "readonly"
 };
 
+// Classic scripts loaded before the module graph (geo.js, supabase-config.js, auth.js) publish
+// these on window. Modules read them rather than importing them, so they are declared here —
+// this keeps `no-undef` meaningful for everything the modules genuinely import themselves.
+const classicGlobals = {
+  scrapmanDb: "readonly",
+  scrapmanSession: "readonly",
+  SCRAPMAN_AUTH_CONFIGURED: "readonly",
+  scrapmanRole: "readonly",
+  scrapmanApplyRoleUI: "readonly",
+  scrapmanEmitAuthChange: "readonly",
+  scrapmanLoadProfile: "readonly",
+  scrapmanRefreshSession: "readonly",
+  scrapmanSignUp: "readonly",
+  scrapmanSignIn: "readonly",
+  scrapmanSignOut: "readonly",
+  scrapmanRequestPasswordReset: "readonly",
+  scrapmanUpdatePassword: "readonly",
+  scrapmanMessageChannel: "readonly",
+  scrapmanGeocodePostcode: "readonly",
+  scrapmanHaversine: "readonly",
+  scrapmanSavedLocation: "readonly",
+  scrapmanSaveLocation: "readonly",
+  scrapmanRequestGeolocation: "readonly",
+  scrapmanAutoLocate: "readonly",
+  scrapmanReverseGeocode: "readonly",
+  scrapmanLocationFromApiResult: "readonly",
+  scrapmanCouncilSlug: "readonly",
+  scrapmanCouncilLink: "readonly",
+  scrapmanStartBroadcastingLocation: "readonly",
+  scrapmanStopBroadcastingLocation: "readonly",
+  scrapmanSubscribeToLocation: "readonly",
+  scrapmanUnsubscribeFromLocation: "readonly",
+  scrapmanSignOutEverywhere: "readonly"
+};
+
 export default [
   {
     ignores: ["node_modules/**", "**/node_modules/**", "**/*.min.js"]
@@ -63,7 +98,7 @@ export default [
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: "module",
-      globals: { ...browserGlobals, ...nodeGlobals }
+      globals: { ...browserGlobals, ...nodeGlobals, ...classicGlobals }
     },
     rules: {
       "no-undef": "error",
