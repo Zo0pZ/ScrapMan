@@ -23,6 +23,10 @@
  * build a reference for a note that has not round-tripped through the database yet
  * (the "collected, saving…" state) and still show the same identifier the server will
  * issue. Format: WTN-YYYYMMDD-000123 */
+/**
+ * @param {number|string} listingId
+ * @param {Date|string} [when] collection timestamp — a Date, or the ISO string PostgREST returns
+ */
 export function transferNoteReference(listingId, when = new Date()) {
   const id = Number.parseInt(listingId, 10)
   if (!Number.isFinite(id) || id <= 0) return ""
@@ -98,6 +102,10 @@ const NOT_RECORDED = "Not recorded"
 
 /* Normalise the database row (snake_case from PostgREST) or the jsonb payload (camelCase
  * from the trigger) into one shape, so the screen and the printed note always agree. */
+/**
+ * @param {{ listing?: any, proof?: any, collector?: any, payload?: any }} [source] the joined
+ *   job_proofs row (snake_case) or the jsonb payload the trigger wrote (camelCase)
+ */
 export function buildTransferNote({ listing, proof, collector, payload } = {}) {
   const p = payload || {}
   const l = listing || {}
