@@ -9,8 +9,8 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization"
 };
 
-function sendJSON(res, statusCode, payload) {
-  res.writeHead(statusCode, { "Content-Type": "application/json", ...CORS_HEADERS });
+function sendJSON(res, statusCode, payload, extraHeaders = {}) {
+  res.writeHead(statusCode, { "Content-Type": "application/json", ...CORS_HEADERS, ...extraHeaders });
   res.end(JSON.stringify(payload));
 }
 

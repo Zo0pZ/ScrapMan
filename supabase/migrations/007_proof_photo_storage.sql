@@ -45,6 +45,21 @@ comment on column job_proofs.photo_path is
 create index if not exists job_proofs_assignment_idx on job_proofs (assignment_id);
 
 -- ------------------------------------------------------------
+-- 2b. Make a proof-less completion say so
+-- ------------------------------------------------------------
+-- A household can already mark its own job collected (migration 005) when the
+-- collector forgets to. That path writes no job_proofs row, so the job looks
+-- identical to a properly evidenced one and the waste transfer note — the record
+-- that matters in a dispute — silently never existed. The flag makes the difference
+-- visible instead of implicit: reports can count unevidenced completions, the card
+-- shows a "no proof" marker, and the household is offered the weight form.
+alter table job_assignments
+  add column if not exists completed_without_proof boolean not null default false;
+
+comment on column job_assignments.completed_without_proof is
+  'True when the household marked the job collected without a job_proofs row, so no waste transfer note was issued.';
+
+-- ------------------------------------------------------------
 -- 3. Storage policies — participants only, read and write
 -- ------------------------------------------------------------
 drop policy if exists "participants upload proof photos" on storage.objects;

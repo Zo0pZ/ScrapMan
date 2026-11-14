@@ -61,6 +61,25 @@ const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
    without starting a server or reaching Stripe/the EA register. */
 const { normalizeCouncilName, cleanRegNumber, isExpired } = require("./lib/verification");
 const { ROUTES, matchRoute, normalizePathname, HttpError } = require("./lib/router");
+const { createLimiterSet } = require("./lib/ratelimit");
+
+/* Per-client abuse brakes. /verify spends one Environment Agency register quota unit
+ * per call and every route runs on this app's single vCPU, so each endpoint gets its
+ * own per-minute budget. Counters are in-memory: they reset on restart and are not
+ * shared between instances, which is fine for one process and is documented in
+ * lib/ratelimit.js. Set RATE_LIMIT_DISABLED=1 to switch them off locally. */
+const RATE_LIMITS = {
+  verify: { windowMs: 60_000, max: 30 },
+  "submit-verification": { windowMs: 60_000, max: 10 },
+  "notify-new-listing": { windowMs: 60_000, max: 20 },
+  "create-unlock-session": { windowMs: 60_000, max: 20 },
+  "create-pro-session": { windowMs: 60_000, max: 20 },
+  "create-boost-session": { windowMs: 60_000, max: 20 },
+  "customer-portal": { windowMs: 60_000, max: 20 },
+  "metal-prices": { windowMs: 60_000, max: 60 }
+};
+const rateLimits = createLimiterSet(RATE_LIMITS);
+const RATE_LIMIT_DISABLED = process.env.RATE_LIMIT_DISABLED === "1";
 
 const stripe = STRIPE_SECRET_KEY
   ? require("stripe")(STRIPE_SECRET_KEY)
@@ -632,6 +651,21 @@ const server = http.createServer(async (req, res) => {
 
   const { pathname, searchParams } = new URL(req.url, `http://${req.headers.host}`);
   const { route, methodMismatch } = matchRoute(ROUTES, req.method, pathname);
+
+  // Only API routes are limited — static assets for one page load would otherwise eat
+  // a normal visitor's budget. 429 carries Retry-After so a well-behaved client backs off.
+  if (route && !RATE_LIMIT_DISABLED) {
+    const verdict = rateLimits.check(route.name, req);
+    if (!verdict.allowed) {
+      const retryAfter = Math.max(1, Math.ceil(verdict.retryAfterMs / 1000));
+      return sendJSON(
+        res,
+        429,
+        { error: "Too many requests — please try again shortly.", retryAfterSeconds: retryAfter },
+        { "Retry-After": String(retryAfter) }
+      );
+    }
+  }
 
   if (!route) {
     // The frontend is served by this same process (see serveStatic). API paths are matched
