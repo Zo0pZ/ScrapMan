@@ -68,11 +68,18 @@ interface HTMLElement {
 
 interface Element {
   dataset: DOMStringMap;
+  onclick: any;
 }
 
 interface EventTarget {
   /** e.target is an EventTarget, but in every handler here it is an element. */
   closest<E extends Element = Element>(selectors: string): E | null;
+  /** e.target is a <form> in the submit handlers. */
+  reset(): void;
+  /** e.target is a <form> or a container in the delegated handlers. */
+  querySelector(selectors: string): Element | null;
+  /** e.target is the file <input> in the photo handler. */
+  files: any;
 }
 
 interface Navigator {
