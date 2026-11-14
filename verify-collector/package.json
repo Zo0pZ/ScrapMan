@@ -9,7 +9,7 @@
     "setup-stripe-products": "node scripts/setup-stripe-products.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
