@@ -59,6 +59,27 @@ alter table job_assignments
 comment on column job_assignments.completed_without_proof is
   'True when the household marked the job collected without a job_proofs row, so no waste transfer note was issued.';
 
+-- When the weight is finally recorded — usually the household adding it after tapping
+-- "Mark as collected" — the job is evidenced after all, so the marker must clear itself.
+create or replace function public.clear_completed_without_proof()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update job_assignments
+     set completed_without_proof = false
+   where completed_without_proof
+     and (id = new.assignment_id or listing_id = new.listing_id);
+  return new;
+end $$;
+
+drop trigger if exists job_proofs_clear_no_proof on job_proofs;
+create trigger job_proofs_clear_no_proof
+  after insert on job_proofs
+  for each row execute function public.clear_completed_without_proof();
+
 -- ------------------------------------------------------------
 -- 3. Storage policies — participants only, read and write
 -- ------------------------------------------------------------

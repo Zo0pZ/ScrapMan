@@ -4,7 +4,7 @@ import { TYPE_ICON } from "../domain/labels.js";
 import { openSheet, closeSheet } from "./navigation.js";
 import { startStripeCheckout } from "./payments.js";
 import { badgeProgress, formatKg } from "../domain/badges.js";
-import { openTransferNote, openDisputeSheet } from "./proofs.js";
+import { openTransferNote, openDisputeSheet, openProofSheet, proofPhotoUrl } from "./proofs.js";
 
 /* ---------- homeowner "My listings" hub: history, impact counters, boost ---------- */
 
@@ -12,7 +12,7 @@ export async function getMyListings() {
   if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return [];
   const { data, error } = await scrapmanDb
     .from("listings")
-    .select("*, job_assignments(id, status, accepted_at, updated_at, collector_id, profiles(display_name))")
+    .select("*, job_assignments(id, status, accepted_at, updated_at, collector_id, completed_without_proof, profiles(display_name)), job_proofs(photo_path, photo_url)")
     .eq("homeowner_id", scrapmanSession.user.id)
     .order("created_at", { ascending: false });
   if (error) { console.error(error); return []; }
@@ -106,15 +106,27 @@ export function renderMyListingsList(listings, myRatings) {
       // stuck at "Scheduled" forever with no way to rate the collector afterwards.
       const collectorName = (assignment.profiles && assignment.profiles.display_name) || "your collector";
       metaExtra = ` &middot; ${esc(collectorName)}`;
-      actionHTML = `<button class="add-btn" data-mark-collected="${assignment.id}">Mark as collected</button>
+      actionHTML = `<button class="add-btn" data-mark-collected="${assignment.id}" data-listing-id="${l.id}">Mark as collected</button>
         <button class="add-btn" data-dispute="${assignment.id}">Nobody turned up?</button>`;
     } else if (label === "Collected" && assignment) {
       const collectorName = (assignment.profiles && assignment.profiles.display_name) || "your collector";
       metaExtra = ` &middot; by ${esc(collectorName)}`;
       const existingStars = myRatings && myRatings.get(assignment.id);
+      const proof = Array.isArray(l.job_proofs) ? l.job_proofs[0] : l.job_proofs;
+      const photoPath = proof && (proof.photo_path || proof.photo_url);
+      // A household can mark a job collected without evidence (migration 005) — the
+      // collector forgot, or their phone died. That path issues no waste transfer note,
+      // so say so on the card instead of letting it look like an evidenced job, and
+      // offer the weight form to turn it into a real record.
+      const noProof = assignment.completed_without_proof === true;
       actionHTML = (existingStars
         ? `<span class="tag">You rated: ${renderStars(existingStars)}</span>`
         : `<button class="add-btn" data-rate="${assignment.id}" data-collector-id="${assignment.collector_id}" data-collector-name="${esc(collectorName)}">Rate your collector</button>`)
+        + (noProof
+          ? `<span class="tag tag-warning">No collection record</span>`
+            + `<button class="add-btn" data-add-proof="${assignment.id}" data-listing-id="${l.id}" data-collector-id="${assignment.collector_id}">Add weight &amp; photo</button>`
+          : "")
+        + (photoPath ? `<button class="add-btn" data-view-photo="${esc(photoPath)}">View photo</button>` : "")
         + `<button class="add-btn" data-transfer-note="${l.id}">Collection record</button>`
         + `<button class="add-btn" data-dispute="${assignment.id}">Something wrong?</button>`;
     }
@@ -158,6 +170,26 @@ document.getElementById("myListingsList").addEventListener("click", e => {
   }
   const markCollectedBtn = e.target.closest("[data-mark-collected]");
   if (markCollectedBtn) markListingCollected(Number(markCollectedBtn.dataset.markCollected), markCollectedBtn);
+  const addProofBtn = e.target.closest("[data-add-proof]");
+  if (addProofBtn) {
+    openProofSheet({
+      assignment_id: Number(addProofBtn.dataset.addProof),
+      listing_id: Number(addProofBtn.dataset.listingId),
+      collector_id: addProofBtn.dataset.collectorId,
+      title: "Record what was collected"
+    });
+    return;
+  }
+  const viewPhotoBtn = e.target.closest("[data-view-photo]");
+  if (viewPhotoBtn) {
+    // The bucket is private: the object path alone is useless, so mint a short-lived
+    // signed URL for this participant rather than exposing a permanent public link.
+    proofPhotoUrl(viewPhotoBtn.dataset.viewPhoto).then(url => {
+      if (url) window.open(url, "_blank", "noopener");
+      else alert("That photo isn't available right now — please try again.");
+    });
+    return;
+  }
   const noteBtn = e.target.closest("[data-transfer-note]");
   if (noteBtn) { openTransferNote(Number(noteBtn.dataset.transferNote)); return; }
   const disputeBtn = e.target.closest("[data-dispute]");
@@ -173,7 +205,17 @@ document.getElementById("myListingsList").addEventListener("click", e => {
 export async function markListingCollected(assignmentId, btn) {
   btn.disabled = true;
   btn.textContent = "Marking as collected…";
-  const { error } = await scrapmanDb.from("job_assignments").update({ status: "completed" }).eq("id", assignmentId);
+  // If the collector already recorded what they took, this is just a status nudge and
+  // the job is evidenced. If nothing was recorded, say so on the assignment so the
+  // missing transfer note is visible rather than implied.
+  const listingId = btn.dataset.listingId ? Number(btn.dataset.listingId) : null;
+  let hasProof = false;
+  if (listingId) {
+    const { data: proof } = await scrapmanDb.from("job_proofs").select("id").eq("listing_id", listingId).maybeSingle();
+    hasProof = !!proof;
+  }
+  const patch = hasProof ? { status: "completed" } : { status: "completed", completed_without_proof: true };
+  const { error } = await scrapmanDb.from("job_assignments").update(patch).eq("id", assignmentId);
   if (error) {
     btn.disabled = false;
     btn.textContent = "Mark as collected";
