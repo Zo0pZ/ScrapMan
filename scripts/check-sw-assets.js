@@ -62,9 +62,11 @@ function shellFiles() {
 
   // Phase 2 splits the frontend into modules; index.html only references the entry
   // point, so every module under src/ has to be precached too or offline breaks.
-  const srcFiles = walk(join(root, "src")).map((full) =>
-    relative(root, full).split(sep).join("/")
-  );
+  // .d.ts files are type declarations for the toolchain — the browser never requests
+  // them, so precaching them would only waste cache quota.
+  const srcFiles = walk(join(root, "src"))
+    .map((full) => relative(root, full).split(sep).join("/"))
+    .filter((file) => !file.endsWith(".d.ts"));
 
   return [...new Set(["index.html", "manifest.json", ...refs, ...srcFiles])];
 }
