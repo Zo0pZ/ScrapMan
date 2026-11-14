@@ -47,7 +47,13 @@
 
 require("dotenv").config();
 const http = require("http");
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const fs = require("fs/promises");
+const path = require("path");
+
+/* Stripe is optional at boot. On cPanel a key was always supplied, so initialising the SDK
+ * eagerly was safe; in a container the site, the verification proxy and the notification
+ * feed must all start without billing keys. Billing routes answer a clear 503 instead. */
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 
 /* Pure helpers, the route table and HTTP plumbing live in ./lib — see lib/verification.js
    (EA matching rules), lib/router.js (suffix routing + 404/405), lib/http.js and
@@ -55,6 +61,17 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
    without starting a server or reaching Stripe/the EA register. */
 const { normalizeCouncilName, cleanRegNumber, isExpired } = require("./lib/verification");
 const { ROUTES, matchRoute, normalizePathname, HttpError } = require("./lib/router");
+
+const stripe = STRIPE_SECRET_KEY
+  ? require("stripe")(STRIPE_SECRET_KEY)
+  : new Proxy(
+      {},
+      {
+        get() {
+          throw new HttpError(503, "Card payments are not configured on this deployment.");
+        }
+      }
+    );
 const { CORS_HEADERS, sendJSON, readJSONBody, readRawBody } = require("./lib/http");
 const { subscriptionPeriodEnd } = require("./lib/stripe-helpers");
 const { selectRecipients, buildNotificationRow } = require("./lib/notify");
@@ -547,6 +564,11 @@ const server = http.createServer(async (req, res) => {
   const { route, methodMismatch } = matchRoute(ROUTES, req.method, pathname);
 
   if (!route) {
+    // The frontend is served by this same process (see serveStatic). API paths are matched
+    // above, so a request only reaches here when it is not an endpoint — try the site, and
+    // keep the JSON 404 for anything that is not a real file.
+    if (await serveStatic(req, res, pathname)) return;
+
     // Unknown paths are a 404 now. The old fallback answered them with an Environment
     // Agency verification verdict, which hid broken URLs and spent an outbound request
     // on every typo. A path that exists with the wrong method is a 405 instead.
