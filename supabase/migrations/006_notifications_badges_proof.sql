@@ -399,3 +399,33 @@ drop trigger if exists on_dispute_raised on job_disputes;
 create trigger on_dispute_raised
   after insert on job_disputes
   for each row execute procedure public.notify_dispute_raised();
+
+-- ------------------------------------------------------------
+-- 8. Web push subscriptions
+--
+-- The in-app feed and the live badge work without any of this: rows land in
+-- notifications and the open app reacts to them over Realtime. This table exists so
+-- that OS-level alerts keep working when the tab is closed, which additionally needs a
+-- VAPID key pair and a sender — see the note in src/ui/notifications.js.
+--
+-- One row per browser endpoint; `endpoint` is unique because the same device
+-- re-subscribing must update its keys rather than accumulate duplicates.
+-- ------------------------------------------------------------
+create table if not exists push_subscriptions (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references profiles(id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now()
+);
+
+create index if not exists push_subscriptions_user on push_subscriptions (user_id);
+
+alter table push_subscriptions enable row level security;
+
+create policy "users manage their own push subscriptions"
+  on push_subscriptions for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

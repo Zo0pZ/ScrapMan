@@ -53,6 +53,9 @@ const ROUTES = [
   { name: "create-boost-session", path: "/create-boost-session", methods: ["POST"], jsonBody: true },
   { name: "submit-verification", path: "/submit-verification", methods: ["POST"], jsonBody: true },
   { name: "customer-portal", path: "/customer-portal", methods: ["POST"] },
+  // Fan-out of a newly listed job to verified collectors inside their service radius.
+  // Must come before the generic /verify routes below, which match as suffixes.
+  { name: "notify-new-listing", path: "/notify-new-listing", methods: ["POST"], jsonBody: true },
   // The original check-only verification endpoint (the client's VERIFY_ENDPOINT base).
   // Kept last: it is the shortest suffix, so anything more specific must win first.
   { name: "verify", path: "/verify-collector", methods: ["GET", "POST"], jsonBody: true },
