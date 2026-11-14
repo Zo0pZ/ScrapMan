@@ -57,6 +57,7 @@ const { normalizeCouncilName, cleanRegNumber, isExpired } = require("./lib/verif
 const { ROUTES, matchRoute, normalizePathname, HttpError } = require("./lib/router");
 const { CORS_HEADERS, sendJSON, readJSONBody, readRawBody } = require("./lib/http");
 const { subscriptionPeriodEnd } = require("./lib/stripe-helpers");
+const { selectRecipients, buildNotificationRow } = require("./lib/notify");
 
 const PRO_BASE = "https://environment.data.gov.uk/public-register";
 
@@ -387,6 +388,71 @@ async function handleCustomerPortal(req, res) {
   sendJSON(res, 200, { url: portalSession.url });
 }
 
+/* Insert rows, silently skipping any that collide with an existing unique key. Used by
+   the notification fan-out, which must be safe to run twice for the same listing (a
+   homeowner tapping "alert collectors" again, or a retried request): the
+   (user_id, listing_id, kind) unique index in migration 006 makes duplicates impossible,
+   and resolution=ignore-duplicates turns that into a no-op instead of a 409. */
+async function supabaseInsertIgnore(table, rows) {
+  if (!rows || !rows.length) return;
+  const res = await fetch(`${process.env.SUPABASE_URL}/rest/v1/${table}`, {
+    method: "POST",
+    headers: {
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal,resolution=ignore-duplicates"
+    },
+    body: JSON.stringify(rows)
+  });
+  if (!res.ok) throw new Error(`Supabase insert on ${table} failed: ${res.status} ${await res.text()}`);
+}
+
+/* ---------- notify-new-listing: "tell collectors near me" ----------
+ *
+ * Called by the homeowner straight after a listing is created. The caller is resolved
+ * from their bearer token (never from the body) and must own the listing, otherwise
+ * anyone could fan a job out to every collector on the platform.
+ *
+ * The actual eligibility rules live in lib/notify.js so they can be unit tested: a
+ * collector is told about the job only if they are verified, opted in, have a service
+ * area, and the listing is inside their radius. Recipients are capped and ordered
+ * nearest-first, so a dense city listing doesn't notify hundreds of people.
+ */
+async function handleNotifyNewListing(req, res, body) {
+  const userId = await resolveProfileId(req.headers.authorization);
+  if (!userId) return sendJSON(res, 401, { error: "Sign in and try again." });
+
+  const listingId = Number(body && body.listingId);
+  if (!Number.isFinite(listingId) || listingId <= 0) {
+    return sendJSON(res, 400, { error: "Missing listingId" });
+  }
+
+  const rows = await supabaseSelect(
+    "listings",
+    `id=eq.${listingId}&select=id,homeowner_id,title,metal_type,weight_band,lat,lng,address,status`
+  );
+  const listing = rows && rows[0];
+  if (!listing) return sendJSON(res, 404, { error: "Listing not found." });
+  if (listing.homeowner_id !== userId) return sendJSON(res, 403, { error: "That's not your listing." });
+  if (listing.status !== "open") {
+    return sendJSON(res, 400, { error: "Only a listing that is still open can be sent to collectors." });
+  }
+
+  const collectors = await supabaseSelect(
+    "collector_profiles",
+    "select=profile_id,service_lat,service_lng,service_radius_miles,notify_new_jobs,verification_status" +
+      "&verification_status=eq.verified&notify_new_jobs=is.true"
+  );
+
+  const recipients = selectRecipients(listing, collectors);
+  if (!recipients.length) return sendJSON(res, 200, { notified: 0 });
+
+  const pending = recipients.map((recipient) => buildNotificationRow(listing, recipient));
+  await supabaseInsertIgnore("notifications", pending);
+  sendJSON(res, 200, { notified: pending.length });
+}
+
 /* ---------- Stripe webhook — the only thing allowed to actually grant an unlock or
    activate/cancel Pro. Everything above just starts a Checkout Session; nothing is
    provisioned until Stripe confirms the payment here. ---------- */
@@ -508,6 +574,7 @@ const server = http.createServer(async (req, res) => {
       case "create-boost-session": return await handleCreateBoostSession(req, res, body);
       case "submit-verification": return await handleSubmitVerification(req, res, body);
       case "customer-portal": return await handleCustomerPortal(req, res);
+      case "notify-new-listing": return await handleNotifyNewListing(req, res, body);
       case "verify": {
         const params = req.method === "POST" ? body : Object.fromEntries(searchParams);
         return await handleVerify(req, res, params);
