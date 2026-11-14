@@ -24,13 +24,18 @@ export function haversine(a, b) {
 }
 
 /**
+ * @typedef {{ lat: number, lng: number }} Point
+ * @typedef {Point & { id?: any, legDist: number }} RouteStop
+ */
+
+/**
  * Order jobs by repeatedly hopping to the nearest unvisited one, starting at the depot.
  * Nearest-neighbour is deliberate: it is O(n^2) but instantaneous for the handful of jobs
  * a collector does in a day, and a genuinely optimal route would need a solver.
  *
- * @param {Array<{lat: number, lng: number}>} jobs
- * @param {{lat: number, lng: number}} depot
- * @returns {Array<object>} the same jobs, ordered, each with the `legDist` that took it there
+ * @param {Array<Point & { id?: any }>} jobs
+ * @param {Point} depot
+ * @returns {Array<RouteStop>} the same jobs, ordered, each with the `legDist` that took it there
  */
 export function nearestNeighborRoute(jobs, depot) {
   const remaining = [...jobs];
@@ -51,8 +56,8 @@ export function nearestNeighborRoute(jobs, depot) {
 
 /**
  * Total distance of an ordered route, including the leg from the depot to the first stop.
- * @param {Array<{lat: number, lng: number}>} orderedJobs
- * @param {{lat: number, lng: number}} depot
+ * @param {Array<Point>} orderedJobs
+ * @param {Point} depot
  * @returns {number}
  */
 export function routeDistance(orderedJobs, depot) {

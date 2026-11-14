@@ -21,8 +21,25 @@
  * so its presence alone tells us whether the job is unlocked; no separate job_unlocks
  * lookup is needed.
  *
+ * @typedef {object} Job
+ * @property {any} id
+ * @property {any} title
+ * @property {any} type
+ * @property {any} weight
+ * @property {any} lat
+ * @property {any} lng
+ * @property {any} address
+ * @property {any} urgency
+ * @property {boolean} boosted
+ * @property {boolean} unlocked
+ * @property {any} contactName
+ * @property {any} contactPhone
+ * @property {any} fullAddress
+ */
+
+/**
  * @param {any} row
- * @returns {object}
+ * @returns {Job}
  */
 export function mapListingRow(row) {
   const contact = row.listing_contacts || null;
@@ -58,6 +75,7 @@ export function supabaseRowFetcher(db) {
  * A single-flight listings source.
  *
  * @param {{fetchRows: () => Promise<any[]>}} deps
+ * @returns {{ openJobs: () => Promise<Job[]> }}
  */
 export function createListingsSource({ fetchRows }) {
   /** @type {Promise<any[]>|null} */
@@ -74,7 +92,7 @@ export function createListingsSource({ fetchRows }) {
   }
 
   return {
-    /** Open jobs, re-read from the backend on each call. @returns {Promise<any[]>} */
+    /** Open jobs, re-read from the backend on each call. @returns {Promise<Job[]>} */
     openJobs() {
       return load();
     }
