@@ -1074,3 +1074,91 @@ body.page { background: var(--color-background); padding: 0; }
 .council-grid a.found { border-color: var(--color-accent); box-shadow: 0 0 0 2px var(--color-accent-soft); }
 .council-grid a.found::after { content: " — that's you"; font-weight: 500; color: var(--color-accent-dark); }
 .page-footer { margin-top: 40px; border-top: 1px solid var(--color-border); padding-top: 16px; font-size: 0.8rem; color: var(--color-muted-foreground); }
+
+/* ---------- notifications ---------- */
+
+.notif-bell { position: relative; }
+
+.notif-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #e5484d;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.notif-dot[hidden] { display: none; }
+
+.notif-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+
+.notif-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notif-row.unread { border-color: rgba(52, 211, 153, 0.45); background: rgba(52, 211, 153, 0.07); }
+.notif-icon { font-size: 18px; line-height: 1.2; }
+.notif-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.notif-title { font-weight: 600; font-size: 14px; }
+.notif-body { font-size: 13px; opacity: 0.75; }
+.notif-time { font-size: 11px; opacity: 0.55; }
+.notif-row .notif-dot { position: static; margin-top: 4px; flex: 0 0 auto; }
+
+/* ---------- household recycling badge ---------- */
+
+.badge-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+
+.badge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-chip .badge-icon { font-size: 13px; }
+.badge-chip.tier-bronze { border-color: #a97142; background: rgba(169, 113, 66, 0.16); color: #e0b183; }
+.badge-chip.tier-silver { border-color: #b9c2cc; background: rgba(185, 194, 204, 0.14); color: #dbe3ea; }
+.badge-chip.tier-gold { border-color: #d9a441; background: rgba(217, 164, 65, 0.16); color: #f0cd84; }
+.badge-chip.tier-platinum { border-color: #7fd7d1; background: rgba(127, 215, 209, 0.14); color: #b6ece7; }
+
+.badge-progress { font-size: 12px; opacity: 0.6; }
+.badge-note { font-size: 12px; opacity: 0.6; margin-top: 6px; }
+
+/* ---------- proof / dispute sheets ---------- */
+
+#overlay-proof .field select,
+#overlay-dispute .field textarea { width: 100%; }
+
+.print-only { display: none; }
+
+#printRoot { color: #111; }
+
+@media print {
+  body.printing .app-shell,
+  body.printing .overlay,
+  body.printing nav { display: none !important; }
+  body.printing #printRoot { display: block; padding: 24px; background: #fff; }
+}
