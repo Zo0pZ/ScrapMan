@@ -5,46 +5,6 @@ let DEPOT = { lat: 52.4862, lng: -1.8904, label: "Birmingham" };
 let usingDefaultLocation = true;
 let locationAttempted = false;
 
-const WEIGHT_LABEL = { small: "Car boot", medium: "Trailer load", large: "Skip load" };
-const URGENCY_LABEL = { today: "Today", week: "This week", norush: "No rush" };
-const TYPE_LABEL = { ferrous: "Ferrous", nonferrous: "Non-ferrous", appliance: "Appliance", mixed: "Mixed" };
-const TYPE_ICON = {
-  ferrous: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>',
-  nonferrous: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2-2 2.6-2.6Z"/></svg>',
-  appliance: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="5" y1="9" x2="19" y2="9"/><circle cx="9" cy="6" r="0.6" fill="currentColor" stroke="none"/></svg>',
-  mixed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="10" width="9" height="9" rx="1.5"/><circle cx="16.5" cy="9.5" r="5"/></svg>'
-};
-
-/* ---------- collector dashboard assumptions ----------
-   Everything here is a clearly-labelled guide/estimate, not a measured per-job value —
-   the app doesn't record actual collected weight, fuel spend, or per-trip mileage. */
-const SCRAP_YARD_DISCOUNT = 0.35;        // guide price = LME spot x (1 - this); yards typically pay 20-50% below spot
-const WEIGHT_BAND_KG = { small: 15, medium: 60, large: 150 }; // rough midpoints for "car boot / trailer load / skip load"
-const AVG_MILES_SAVED_PER_CLUSTERED_JOB = 1.8; // typical saving the route optimiser finds vs point-to-point
-const VAN_MPG = 28;
-const FUEL_PRICE_PER_LITRE = 1.48;
-const CO2_KG_PER_MILE = 0.25; // light commercial van, UK average
-const BRASS_FRACTION_OF_COPPER = 0.72; // brass scrap isn't LME-traded; priced as a share of copper's value
-const STEEL_GUIDE_RATE_PER_KG = 0.15;  // steel scrap isn't LME-traded either; flat local guide rate
-
-/* ---------- homeowner impact counter assumptions ----------
-   Same "clearly-labelled guide/estimate" spirit as the collector figures above — the
-   app doesn't measure an actual tip-run avoided, just a typical one. */
-const TIME_SAVED_MINUTES_PER_COLLECTION = 45; // avoiding a round trip to the local tip/recycling centre
-const AVG_TIP_RUN_MILES = 6;                  // typical round-trip mileage to a local tip
-const CAR_MPG = 45;                           // average UK petrol/diesel car, not VAN_MPG (that's for a collector's van)
-const IMPACT_TIER_KG = [ // "recycled material score" — simple weight-diverted tiers, low to high
-  { kg: 200, label: "Gold" },
-  { kg: 50, label: "Silver" },
-  { kg: 0, label: "Bronze" }
-];
-
-const MATERIAL_FEED_ENDPOINT = "/verify-collector";
-const MATERIAL_PRICES_CACHE_KEY = "scrapman_metal_prices";
-const MATERIAL_PRICES_MAX_AGE = 24 * 60 * 60 * 1000; // 1 day, matches the server's own cache window
-
-// Fallback guide rates (GBP/kg) used only if the live feed can't be reached at all.
-const STATIC_MATERIAL_RATES = { copper: 6.20, aluminum: 1.55, zinc: 2.10, lead: 1.75 };
 
 /* ---------- helpers & state ---------- */
 function esc(s) {
@@ -424,33 +384,6 @@ async function personalizeCouncilLink() {
 }
 
 /* ---------- jobs screen ---------- */
-function mapListingRow(row) {
-  // listing_contacts is RLS-gated by job_unlocks OR an active Pro subscription — this
-  // embed comes back null for any job the signed-in collector hasn't unlocked (and
-  // isn't Pro for), so its presence alone tells us whether the job is unlocked; no
-  // separate job_unlocks lookup is needed.
-  const contact = row.listing_contacts || null;
-  return {
-    id: row.id, title: row.title, type: row.metal_type, weight: row.weight_band,
-    lat: row.lat, lng: row.lng, address: row.address, urgency: row.urgency,
-    boosted: !!row.is_boosted,
-    unlocked: !!contact,
-    contactName: contact && contact.contact_name, contactPhone: contact && contact.contact_phone,
-    fullAddress: contact && contact.full_address
-  };
-}
-
-async function getAllJobs() {
-  if (!SCRAPMAN_AUTH_CONFIGURED || !scrapmanDb) return [];
-  const { data, error } = await scrapmanDb
-    .from("listings")
-    .select("*, listing_contacts(contact_name, contact_phone, full_address)")
-    .eq("status", "open")
-    .order("is_boosted", { ascending: false })
-    .order("created_at", { ascending: false });
-  if (error) { console.error(error); return []; }
-  return (data || []).map(mapListingRow);
-}
 
 /* ---------- accept & track a job (Supabase-only — no demo-mode equivalent) ---------- */
 async function acceptJob(id) {
@@ -1317,23 +1250,6 @@ async function initJobsMap() {
 }
 
 /* ---------- route planner ---------- */
-function nearestNeighborRoute(jobs) {
-  const remaining = [...jobs];
-  const order = [];
-  let current = DEPOT;
-  while (remaining.length) {
-    let bestIdx = 0, bestDist = Infinity;
-    remaining.forEach((j, i) => {
-      const d = haversine(current, j);
-      if (d < bestDist) { bestDist = d; bestIdx = i; }
-    });
-    const next = remaining.splice(bestIdx, 1)[0];
-    order.push({ ...next, legDist: bestDist });
-    current = next;
-  }
-  return order;
-}
-
 async function renderRoute() {
   const jobs = (await getAllJobs()).filter(j => routeIds.includes(j.id));
   const emptyEl = document.getElementById("routeEmpty");
