@@ -5,6 +5,29 @@ let DEPOT = { lat: 52.4862, lng: -1.8904, label: "Birmingham" };
 let usingDefaultLocation = true;
 let locationAttempted = false;
 
+/* ---------- modules ----------
+ * Phase 2: pure logic and data access live in src/ and are imported here. geo.js,
+ * supabase-config.js and auth.js stay classic scripts and publish the globals this module
+ * reads (scrapmanDb, scrapmanSession, SCRAPMAN_AUTH_CONFIGURED, scrapmanGeocodePostcode).
+ */
+import { WEIGHT_LABEL, TYPE_LABEL, TYPE_ICON } from "./src/domain/labels.js";
+import {
+  SCRAP_YARD_DISCOUNT, WEIGHT_BAND_KG, AVG_MILES_SAVED_PER_CLUSTERED_JOB, VAN_MPG,
+  FUEL_PRICE_PER_LITRE, CO2_KG_PER_MILE, BRASS_FRACTION_OF_COPPER, STEEL_GUIDE_RATE_PER_KG,
+  TIME_SAVED_MINUTES_PER_COLLECTION, AVG_TIP_RUN_MILES, CAR_MPG,
+  MATERIAL_FEED_ENDPOINT, MATERIAL_PRICES_CACHE_KEY, MATERIAL_PRICES_MAX_AGE,
+  STATIC_MATERIAL_RATES, impactTierLabel
+} from "./src/domain/rates.js";
+import { haversine, nearestNeighborRoute } from "./src/domain/routing.js";
+import { createListingsSource, supabaseRowFetcher } from "./src/data/listings.js";
+
+/* One listings source for the whole app, so concurrent renders share a single query
+   instead of each screen fetching the table for itself. */
+const listings = createListingsSource({
+  fetchRows: () => (SCRAPMAN_AUTH_CONFIGURED && scrapmanDb
+    ? supabaseRowFetcher(scrapmanDb)()
+    : Promise.resolve([]))
+});
 
 /* ---------- helpers & state ---------- */
 function esc(s) {
@@ -300,8 +323,7 @@ document.querySelectorAll(".sheet-close").forEach(btn => {
 });
 
 /* ---------- distance & geocoding ---------- */
-/* haversine / geocodePostcode are provided by geo.js (scrapmanHaversine / scrapmanGeocodePostcode) */
-const haversine = scrapmanHaversine;
+/* geocodePostcode still comes from geo.js; haversine is imported from src/domain/routing.js */
 const geocodePostcode = scrapmanGeocodePostcode;
 
 /* ---------- user location (collector's own position, or a homeowner's council lookup) ---------- */
@@ -532,10 +554,6 @@ function renderStars(stars) {
   return "&#9733;".repeat(stars) + "&#9734;".repeat(5 - stars);
 }
 
-function impactTierLabel(kg) {
-  return (IMPACT_TIER_KG.find(t => kg >= t.kg) || IMPACT_TIER_KG[IMPACT_TIER_KG.length - 1]).label;
-}
-
 // Time/fuel/weight are all estimates — see the assumptions block near the top of this
 // file. mpg here means UK imperial miles-per-gallon (4.546 L/gal), same as the
 // collector ROI tracker's fuel figure.
@@ -736,9 +754,13 @@ function contactBlockHTML(j) {
     </div>`;
 }
 
-async function renderJobs() {
+/**
+ * @param {any[]} [prefetched] rows the caller already loaded — pass them in so a screen
+ *   that also needs the list for its map doesn't trigger a second listings query.
+ */
+async function renderJobs(prefetched) {
   const list = document.getElementById("jobList");
-  const allJobs = await getAllJobs();
+  const allJobs = prefetched || await listings.openJobs();
   const jobs = allJobs
     .filter(j => activeFilter === "all" || j.type === activeFilter)
     .map(j => ({ ...j, dist: haversine(DEPOT, j) }))
@@ -1234,7 +1256,7 @@ async function initJobsMap() {
   jobsMap = L.map("jobsMap", { zoomControl: false, attributionControl: false }).setView([DEPOT.lat, DEPOT.lng], usingDefaultLocation ? 11 : 12);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(jobsMap);
   L.marker([DEPOT.lat, DEPOT.lng]).addTo(jobsMap).bindPopup(usingDefaultLocation ? "Default location — set yours" : "You are here");
-  const jobs = await getAllJobs();
+  const jobs = await listings.openJobs();
   jobs.filter(j => activeFilter === "all" || j.type === activeFilter).forEach(j => {
     const markerColor = routeIds.includes(j.id) ? "#037a56" : j.boosted ? "#c98a00" : "#e05f00";
     const marker = L.circleMarker([j.lat, j.lng], {
@@ -1246,12 +1268,12 @@ async function initJobsMap() {
     }).addTo(jobsMap);
     marker.bindPopup(esc(j.title) + (j.boosted ? " — Boosted" : ""));
   });
-  renderJobs();
+  renderJobs(jobs); // reuse the rows already fetched for the map — one query per render
 }
 
 /* ---------- route planner ---------- */
 async function renderRoute() {
-  const jobs = (await getAllJobs()).filter(j => routeIds.includes(j.id));
+  const jobs = (await listings.openJobs()).filter(j => routeIds.includes(j.id));
   const emptyEl = document.getElementById("routeEmpty");
   const contentEl = document.getElementById("routeContent");
 
@@ -1263,7 +1285,7 @@ async function renderRoute() {
   emptyEl.classList.add("hidden");
   contentEl.classList.remove("hidden");
 
-  const ordered = nearestNeighborRoute(jobs);
+  const ordered = nearestNeighborRoute(jobs, DEPOT);
   const totalDist = ordered.reduce((sum, j) => sum + j.legDist, 0);
 
   // naive "as listed" order, for comparison

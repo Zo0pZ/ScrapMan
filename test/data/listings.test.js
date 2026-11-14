@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mapListingRow, createListingsSource } from "../../src/data/listings.js";
+import { mapListingRow, createListingsSource, supabaseRowFetcher } from "../../src/data/listings.js";
 
 test("mapListingRow marks a job unlocked when the RLS-gated contact embed is present", () => {
   const job = mapListingRow({
@@ -27,8 +27,8 @@ test("two concurrent renders issue exactly one listings query", async () => {
     fetchRows: async () => { calls += 1; return [{ id: 1, title: "Load" }]; }
   });
 
-  // This is the regression the refactor exists to prevent: renderJobs + initJobsMap
-  // used to fetch independently, so one Jobs render queried the table twice.
+  // The regression this refactor exists to prevent: renderJobs and initJobsMap used to
+  // fetch independently, so one Jobs render queried the listings table twice.
   const [a, b] = await Promise.all([source.openJobs(), source.openJobs()]);
 
   assert.equal(calls, 1);
@@ -36,29 +36,14 @@ test("two concurrent renders issue exactly one listings query", async () => {
   assert.equal(a.length, 1);
 });
 
-test("a repeated read reuses the fetched rows until invalidated", async () => {
-  let calls = 0;
-  const source = createListingsSource({
-    fetchRows: async () => { calls += 1; return []; }
-  });
-
-  await source.openJobs();
-  await source.openJobs();
-  assert.equal(calls, 1);
-
-  source.invalidate();
-  await source.openJobs();
-  assert.equal(calls, 2);
-});
-
-test("fresh:true always re-queries after a mutation", async () => {
+test("a later render re-reads instead of serving a stale list", async () => {
   let calls = 0;
   const source = createListingsSource({
     fetchRows: async () => { calls += 1; return [{ id: calls }]; }
   });
 
   const first = await source.openJobs();
-  const second = await source.openJobs({ fresh: true });
+  const second = await source.openJobs();
 
   assert.equal(calls, 2);
   assert.equal(first[0].id, 1);
@@ -79,4 +64,35 @@ test("a failed fetch does not leave the source permanently stuck", async () => {
   const jobs = await source.openJobs();
   assert.equal(jobs.length, 1);
   assert.equal(calls, 2);
+});
+
+test("supabaseRowFetcher returns an empty list and logs on a query error", async () => {
+  const logged = [];
+  const originalError = console.error;
+  console.error = (...args) => logged.push(args);
+  try {
+    const db = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({ order: () => ({ order: async () => ({ data: null, error: { message: "boom" } }) }) })
+        })
+      })
+    };
+    assert.deepEqual(await supabaseRowFetcher(db)(), []);
+    assert.equal(logged.length, 1);
+  } finally {
+    console.error = originalError;
+  }
+});
+
+test("supabaseRowFetcher returns the raw rows on success", async () => {
+  const rows = [{ id: 1 }, { id: 2 }];
+  const db = {
+    from: () => ({
+      select: () => ({
+        eq: () => ({ order: () => ({ order: async () => ({ data: rows, error: null }) }) })
+      })
+    })
+  };
+  assert.deepEqual(await supabaseRowFetcher(db)(), rows);
 });

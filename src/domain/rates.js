@@ -44,20 +44,3 @@ export function impactTierLabel(kg) {
   const tier = IMPACT_TIER_KG.find(t => kg >= t.kg);
   return tier ? tier.label : IMPACT_TIER_KG[IMPACT_TIER_KG.length - 1].label;
 }
-
-/**
- * Guide price per kg for a metal type, from a live feed table with a static fallback.
- * Brass and steel aren't LME-traded, so they're derived from copper/steel guide rates.
- * @param {string} type
- * @param {Record<string, number>} table
- * @returns {number}
- */
-export function rateForMetalType(type, table) {
-  const rates = table || STATIC_MATERIAL_RATES;
-  if (type === "ferrous") return STEEL_GUIDE_RATE_PER_KG;
-  if (type === "nonferrous") return rates.copper ?? STATIC_MATERIAL_RATES.copper;
-  if (type === "appliance") return STEEL_GUIDE_RATE_PER_KG * 0.8; // appliances are mostly steel with some copper content
-  // "mixed" — a blend of copper and brass, the most common homeowner load
-  const copper = rates.copper ?? STATIC_MATERIAL_RATES.copper;
-  return copper * (1 - BRASS_FRACTION_OF_COPPER) + copper * BRASS_FRACTION_OF_COPPER;
-}

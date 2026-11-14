@@ -1,14 +1,16 @@
 /* ScrapMan — the open-listings data source.
  *
- * Extracted from app.js. The important change is not the move: it is that fetching is now
- * funnelled through one object that de-duplicates concurrent loads. Previously the Jobs
- * screen fetched the whole listings table up to three times per render (renderJobs,
- * initJobsMap, renderRoute each called getAllJobs()), because every renderer owned its own
- * query.
+ * Extracted from app.js. The important change is not the move: fetching now goes through
+ * one object that de-duplicates concurrent loads. Previously the Jobs screen could fetch
+ * the whole listings table more than once per render, because renderJobs, initJobsMap and
+ * renderRoute each owned their own query.
+ *
+ * There is deliberately no long-lived cache here. Rows are re-read on every call, exactly
+ * as before, so accepting or unlocking a job can never leave a stale list on screen; the
+ * single-flight promise only collapses *concurrent* callers into one query.
  *
  * `fetchRows` is injected so this can be tested without Supabase — see
- * test/data/listings.test.js, which asserts that two concurrent renders produce exactly
- * one query.
+ * test/data/listings.test.js, which asserts that two concurrent renders issue one query.
  */
 
 /**
@@ -58,39 +60,23 @@ export function supabaseRowFetcher(db) {
  * @param {{fetchRows: () => Promise<any[]>}} deps
  */
 export function createListingsSource({ fetchRows }) {
-  /** @type {any[]|null} */
-  let cached = null;
   /** @type {Promise<any[]>|null} */
   let inflight = null;
 
-  async function load(fresh) {
-    if (!fresh && cached) return cached;
-    if (!fresh && inflight) return inflight; // concurrent renders share one query
-    inflight = (async () => {
-      const rows = await fetchRows();
-      cached = rows.map(mapListingRow);
-      return cached;
-    })();
+  async function load() {
+    if (inflight) return inflight; // concurrent renders share one query
+    inflight = fetchRows().then(rows => (rows || []).map(mapListingRow));
     try {
       return await inflight;
     } finally {
-      inflight = null;
+      inflight = null; // next call re-reads; a failure never sticks
     }
   }
 
   return {
-    /**
-     * Open jobs. `fresh` forces a reload (use after accepting/unlocking/collecting so the
-     * UI never shows a stale unlock state); the default reuses whatever was just fetched.
-     * @param {{fresh?: boolean}} [opts]
-     * @returns {Promise<any[]>}
-     */
-    openJobs(opts = {}) {
-      return load(!!opts.fresh);
-    },
-    /** Drop the cache after a mutation, so the next read is guaranteed current. */
-    invalidate() {
-      cached = null;
+    /** Open jobs, re-read from the backend on each call. @returns {Promise<any[]>} */
+    openJobs() {
+      return load();
     }
   };
 }
