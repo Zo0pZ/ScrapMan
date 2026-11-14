@@ -14,5 +14,9 @@
   "engines": {
     "node": ">=22"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "eslint": "^10.15.0",
+    "typescript": "^7.0.2"
+  }
 }
