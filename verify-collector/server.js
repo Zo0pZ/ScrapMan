@@ -554,6 +554,76 @@ async function handleWebhook(req, res) {
    sendJSON / readJSONBody / readRawBody now live in lib/http.js, and route matching
    (including the suffix matching cPanel's proxy needs) in lib/router.js. */
 
+/* Static frontend.
+ *
+ * On cPanel Apache served the site and only /verify-collector/* reached this process, so the
+ * server never needed to read a file. AppJet hosting runs a single container, so a request
+ * that matches no API route is served from the site's own files. Two rules keep it safe:
+ * the resolved path must stay inside the app root (no ../ escapes), and a path that is not a
+ * real file still falls through to the JSON 404 — API typos must not return HTML.
+ */
+const STATIC_ROOT = path.resolve(__dirname, "..");
+const STATIC_TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".xml": "application/xml; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8"
+};
+
+async function serveStatic(req, res, pathname) {
+  if (req.method !== "GET" && req.method !== "HEAD") return false;
+
+  let rel;
+  try {
+    rel = decodeURIComponent(pathname).replace(/^\/+/, "");
+  } catch {
+    return false; // malformed percent-encoding
+  }
+
+  const candidate = path.resolve(STATIC_ROOT, rel || "index.html");
+  if (candidate !== STATIC_ROOT && !candidate.startsWith(STATIC_ROOT + path.sep)) return false;
+
+  let file = candidate;
+  try {
+    const stat = await fs.stat(file);
+    if (stat.isDirectory()) file = path.join(file, "index.html");
+  } catch {
+    // Clean URLs: /about falls back to about.html, then gives up.
+    if (!rel || path.extname(rel)) return false;
+    try {
+      await fs.stat(`${candidate}.html`);
+      file = `${candidate}.html`;
+    } catch {
+      return false;
+    }
+  }
+
+  let body;
+  try {
+    body = await fs.readFile(file);
+  } catch {
+    return false;
+  }
+
+  res.writeHead(200, {
+    "Content-Type": STATIC_TYPES[path.extname(file).toLowerCase()] || "application/octet-stream",
+    "Content-Length": body.length,
+    // The service worker owns offline caching; the shell itself must not go stale in a tab.
+    "Cache-Control": "no-cache"
+  });
+  res.end(req.method === "HEAD" ? undefined : body);
+  return true;
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
     res.writeHead(204, CORS_HEADERS);
