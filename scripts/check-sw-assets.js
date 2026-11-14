@@ -46,18 +46,27 @@ function walk(dir) {
   });
 }
 
-/* Files that make up the app shell and must survive offline. */
+/* Files that make up the app shell and must survive offline.
+ *
+ * Deliberately derived from index.html's own <script src> / <link href> references
+ * rather than "every root file": package.json, eslint.config.js and tsconfig.json are
+ * build tooling, not part of the site, and must not be forced into the precache. */
 function shellFiles() {
-  const rootFiles = readdirSync(root).filter((name) => {
-    const full = join(root, name);
-    if (!statSync(full).isFile()) return false;
-    if (name === "sw.js") return false; // the service worker can't precache itself
-    return /\.(js|css|html|json|svg)$/.test(name);
-  });
+  const html = readFileSync(join(root, "index.html"), "utf8");
+  const refs = [...html.matchAll(/(?:src|href)=["']([^"']+)["']/g)]
+    .map((m) => m[1])
+    .filter((ref) => !/^(https?:)?\/\//.test(ref)) // CDN — someone else's file
+    .filter((ref) => !ref.startsWith("#") && !ref.startsWith("data:"))
+    .map((ref) => ref.replace(/^\.\//, "").split(/[?#]/)[0])
+    .filter((ref) => ref && !ref.startsWith("/")); // server-absolute, not a repo file
+
+  // Phase 2 splits the frontend into modules; index.html only references the entry
+  // point, so every module under src/ has to be precached too or offline breaks.
   const srcFiles = walk(join(root, "src")).map((full) =>
     relative(root, full).split(sep).join("/")
   );
-  return [...rootFiles, ...srcFiles];
+
+  return [...new Set(["index.html", "manifest.json", ...refs, ...srcFiles])];
 }
 
 const assets = readAssets();

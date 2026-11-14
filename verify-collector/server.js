@@ -391,27 +391,6 @@ async function handleCustomerPortal(req, res) {
    activate/cancel Pro. Everything above just starts a Checkout Session; nothing is
    provisioned until Stripe confirms the payment here. ---------- */
 
-function readRawBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on("data", chunk => {
-      chunks.push(chunk);
-      if (chunks.reduce((n, c) => n + c.length, 0) > 1e6) req.destroy();
-    });
-    req.on("end", () => resolve(Buffer.concat(chunks)));
-    req.on("error", reject);
-  });
-}
-
-// Stripe moved current_period_end from the Subscription object down to each
-// subscription item on newer API versions/accounts — read whichever is present
-// rather than assuming one shape.
-function subscriptionPeriodEnd(subscription) {
-  const seconds = subscription.current_period_end
-    || (subscription.items && subscription.items.data[0] && subscription.items.data[0].current_period_end);
-  return seconds ? new Date(seconds * 1000).toISOString() : null;
-}
-
 async function fulfillCheckoutSession(session) {
   const meta = session.metadata || {};
 
