@@ -1,4 +1,4 @@
-const CACHE = "scrapman-v20";
+const CACHE = "scrapman-v21";
 const ASSETS = [
   "./",
   "./index.html",
@@ -19,7 +19,11 @@ const ASSETS = [
   "./src/ui/jobs.js",
   "./src/ui/listScrap.js",
   "./src/ui/location.js",
+  "./src/domain/badges.js",
+  "./src/domain/transferNote.js",
   "./src/ui/messaging.js",
+  "./src/ui/notifications.js",
+  "./src/ui/proofs.js",
   "./src/ui/navigation.js",
   "./src/ui/payments.js",
   "./src/ui/verification.js",
@@ -68,5 +72,51 @@ self.addEventListener("fetch", e => {
         return res;
       })
       .catch(() => caches.match(e.request))
+  );
+});
+
+/* ---------- web push ----------
+ *
+ * Push is deliberately additive. The in-app feed is driven by rows in the `notifications`
+ * table, so alerts still work with no push subscription at all (permission denied, iOS
+ * Safari, a browser that never asked). This handler only paints the system notification;
+ * clicking it focuses an existing window and lets notifications.js decide where to go.
+ */
+self.addEventListener("push", event => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    // A push that isn't JSON still deserves a notification rather than a silent failure.
+    payload = { body: event.data ? event.data.text() : "" };
+  }
+  const title = payload.title || "ScrapMan";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: payload.body || "You have a new update.",
+      icon: "./scrapman-logo-icon-only.svg",
+      badge: "./scrapman-logo-icon-only-mark.svg",
+      // tag collapses repeats of the same event instead of stacking them.
+      tag: payload.tag || "scrapman",
+      data: { href: payload.href || "./" }
+    })
+  );
+});
+
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  const href = (event.notification.data && event.notification.data.href) || "./";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(clients => {
+      for (const client of clients) {
+        if ("focus" in client) {
+          // Hand the destination to the already-running app, then raise that window —
+          // avoids a second cold start and keeps the app's own router in charge.
+          client.postMessage({ type: "scrapman:open", href });
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(href);
+    })
   );
 });
