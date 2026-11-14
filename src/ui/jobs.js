@@ -4,6 +4,8 @@ import { haversine, nearestNeighborRoute } from "../domain/routing.js";
 import { locationLabel } from "./location.js";
 import { openThread } from "./messaging.js";
 import { startUnlock } from "./payments.js";
+import { badgeForKg, toKg, formatKg } from "../domain/badges.js";
+import { openProofSheet } from "./proofs.js";
 
 let jobsMap, routeMap;
 
@@ -44,14 +46,19 @@ export async function renderActiveAssignment() {
       <div><strong>${esc(active.listings.title)}</strong><span>Status: ${esc(active.status.replace("_", " "))} &middot; sharing your location live</span></div>
       <div style="display:flex;gap:8px">
         <button class="add-btn" id="messageCollectionBtn">Message</button>
-        <button class="add-btn" id="completeAssignmentBtn">Mark collected</button>
+        <button class="add-btn" id="completeAssignmentBtn">Record collection</button>
       </div>
     </div>`;
   document.getElementById("messageCollectionBtn").addEventListener("click", () => openThread(active.id));
-  document.getElementById("completeAssignmentBtn").addEventListener("click", async () => {
-    await scrapmanDb.from("job_assignments").update({ status: "completed" }).eq("id", active.id);
-    scrapmanStopBroadcastingLocation();
-    renderActiveAssignment();
+  document.getElementById("completeAssignmentBtn").addEventListener("click", () => {
+    // Completion is no longer a bare status write. The proof sheet records the weight and
+    // payment method, and the record_collection_proof trigger (migration 006) is what marks
+    // the assignment completed, issues the waste transfer note and notifies the household.
+    openProofSheet({
+      assignment_id: active.id,
+      listing_id: active.listing_id,
+      title: active.listings ? active.listings.title : "Confirm collection"
+    });
   });
   // Resumes sharing after a page reload mid-collection — harmless to call again if already running.
   scrapmanStartBroadcastingLocation(active.id);
@@ -130,6 +137,27 @@ export function contactBlockHTML(j) {
  *   that also needs the list for its map doesn't trigger a second listings query.
  */
 
+/* Household recycling badges for the job cards, fetched in one round trip. A collector is
+ * being asked to pay to unlock a job, so the household's recycling record belongs on the
+ * card — but a badge lookup failure must never stop the job list from rendering. */
+async function loadHouseholdBadges(jobs) {
+  const ids = [...new Set(jobs.map(j => j.homeowner_id).filter(Boolean))];
+  if (!ids.length || !SCRAPMAN_AUTH_CONFIGURED || !scrapmanSession) return new Map();
+  try {
+    const { data, error } = await scrapmanDb.rpc("household_badges", { p_homeowners: ids });
+    if (error || !data) return new Map();
+    return new Map(data.map(row => [row.homeowner_id, toKg(row.total_kg)]));
+  } catch {
+    return new Map();
+  }
+}
+
+function householdBadgeChip(kg) {
+  if (kg == null) return "";
+  const tier = badgeForKg(kg);
+  return `<div class="badge-row"><span class="badge-chip tier-${tier.key}" title="Scrap this household has recycled through ScrapMan">${esc(tier.label)} &middot; ${esc(formatKg(kg))}</span></div>`;
+}
+
 export async function renderJobs(prefetched) {
   const list = document.getElementById("jobList");
   const allJobs = prefetched || await listings.openJobs();
@@ -137,6 +165,7 @@ export async function renderJobs(prefetched) {
     .filter(j => state.activeFilter === "all" || j.type === state.activeFilter)
     .map(j => ({ ...j, dist: haversine(state.depot, j) }))
     .sort((a, b) => (Number(b.boosted) - Number(a.boosted)) || (a.dist - b.dist));
+  const badges = await loadHouseholdBadges(jobs);
 
   list.innerHTML = jobs.map(j => {
     const unlocked = j.unlocked;
@@ -145,6 +174,7 @@ export async function renderJobs(prefetched) {
       <span class="job-icon" aria-hidden="true">${TYPE_ICON[j.type] || TYPE_ICON.mixed}</span>
       <div class="job-body">
         <h4>${esc(j.title)}</h4>
+        ${householdBadgeChip(badges.get(j.homeowner_id))}
         <p class="job-meta">${esc(j.address)} &middot; ${j.dist.toFixed(1)} mi away</p>
         <div class="job-tags">
           ${j.boosted ? '<span class="tag boosted-tag">&#128640; Boosted</span>' : ""}
