@@ -65,6 +65,18 @@ export function openProofSheet(assignment) {
   openSheet("overlay-proof");
 }
 
+/* The job-proofs bucket is private (see migration 007), so the stored object path is not
+ * a URL. Mint a short-lived signed link for the participant looking at it. */
+export async function proofPhotoUrl(path) {
+  if (!path || !SCRAPMAN_AUTH_CONFIGURED) return "";
+  const { data, error } = await scrapmanDb.storage.from("job-proofs").createSignedUrl(path, 300);
+  if (error) {
+    console.error(error);
+    return "";
+  }
+  return (data && data.signedUrl) || "";
+}
+
 async function uploadProofPhoto(listingId, file) {
   if (!file) return null;
   if (!SCRAPMAN_AUTH_CONFIGURED) return null;
@@ -108,7 +120,10 @@ export async function submitCollectionProof() {
     const { error } = await scrapmanDb.from("job_proofs").insert({
       listing_id: pending.listing_id,
       assignment_id: pending.assignment_id,
-      collector_id: scrapmanSession.user.id,
+      // A household may record the weight on the assigned collector's behalf (their phone
+      // died, they never bothered). The RLS policy requires the row to point at the
+      // collector actually on the job, so never stamp the signed-in user's id blindly.
+      collector_id: pending.collector_id || scrapmanSession.user.id,
       weight_kg: weight,
       payment_method: payment ? payment.value : "electronic",
       note: note && note.value.trim() ? note.value.trim().slice(0, 500) : null,
