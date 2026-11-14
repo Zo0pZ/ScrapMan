@@ -1,3 +1,12 @@
+import { state, esc, listings, saveJSON } from "../state.js";
+import { WEIGHT_LABEL, TYPE_LABEL, TYPE_ICON } from "../domain/labels.js";
+import { haversine, nearestNeighborRoute } from "../domain/routing.js";
+import { locationLabel } from "./location.js";
+import { openThread } from "./messaging.js";
+import { startUnlock } from "./payments.js";
+
+let jobsMap, routeMap;
+
 /* ---------- jobs screen ---------- */
 
 /* ---------- accept & track a job (Supabase-only — no demo-mode equivalent) ---------- */

@@ -1,3 +1,6 @@
+import { geocodePostcode } from "./location.js";
+import { goTo } from "./navigation.js";
+
 /* ---------- list scrap form ---------- */
 export let selectedWeight = "";
 export const PHOTO_PLACEHOLDER = `

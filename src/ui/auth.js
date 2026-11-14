@@ -1,3 +1,5 @@
+import { goTo, openSheet, closeSheet } from "./navigation.js";
+
 /* ---------- auth (accounts, gated entirely by SCRAPMAN_AUTH_CONFIGURED) ---------- */
 export let authMode = "signup";
 export let authRoleChoice = "homeowner";

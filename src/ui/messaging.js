@@ -1,3 +1,8 @@
+import { esc } from "../state.js";
+import { goTo } from "./navigation.js";
+
+let currentThread = null;
+
 /* ---------- messaging (per accepted job, backed by the real `messages` table — RLS
    restricts each thread to that job's homeowner + assigned collector) ---------- */
 export let scrapmanMessageChannel = null;

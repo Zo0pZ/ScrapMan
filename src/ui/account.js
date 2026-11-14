@@ -1,3 +1,9 @@
+import { esc, getCollector, isPro } from "../state.js";
+import { goTo, openSheet } from "./navigation.js";
+import { startStripeCheckout } from "./payments.js";
+
+let deferredInstallPrompt = null;
+
 /* ---------- account screen ---------- */
 export function renderAccount() {
   // accVerify/accPro are collector-only (data-role="collector" hides them from

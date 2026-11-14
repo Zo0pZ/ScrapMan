@@ -1,3 +1,7 @@
+import { state } from "../state.js";
+import { openSheet, closeSheet } from "./navigation.js";
+import { initJobsMap, renderRoute } from "./jobs.js";
+
 /* ---------- distance & geocoding ---------- */
 /* geocodePostcode still comes from geo.js; haversine is imported from src/domain/routing.js */
 export const geocodePostcode = scrapmanGeocodePostcode;

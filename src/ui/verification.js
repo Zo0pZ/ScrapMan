@@ -1,3 +1,5 @@
+import { goTo } from "./navigation.js";
+
 export const VERIFY_ENDPOINT = "/verify-collector";
 
 export function setVerifyStatus(text, kind) {

@@ -1,3 +1,7 @@
+import { esc, getCollector, loadJSON, saveJSON } from "../state.js";
+import { AVG_MILES_SAVED_PER_CLUSTERED_JOB, BRASS_FRACTION_OF_COPPER, CO2_KG_PER_MILE, FUEL_PRICE_PER_LITRE, MATERIAL_FEED_ENDPOINT, MATERIAL_PRICES_CACHE_KEY, MATERIAL_PRICES_MAX_AGE, SCRAP_YARD_DISCOUNT, STATIC_MATERIAL_RATES, STEEL_GUIDE_RATE_PER_KG, VAN_MPG, WEIGHT_BAND_KG } from "../domain/rates.js";
+import { TYPE_ICON } from "../domain/labels.js";
+
 /* ---------- collector dashboard (Home screen, collector role) ---------- */
 
 export async function fetchMetalPrices() {

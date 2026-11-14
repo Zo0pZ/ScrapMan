@@ -1,3 +1,12 @@
+import { ensureLocation, updateLocationUI, personalizeCouncilLink } from "./location.js";
+import { initJobsMap, renderRoute, renderActiveAssignment, renderTrack } from "./jobs.js";
+import { prefillPostcodeFromLocation } from "./listScrap.js";
+import { renderAccount } from "./account.js";
+import { renderCollectorDashboard } from "./collector.js";
+import { renderHomeownerListingsHub } from "./homeowner.js";
+import { renderMessages, renderThread, unsubscribeFromThreadMessages } from "./messaging.js";
+import { setAuthRoleChoice } from "./auth.js";
+
 /* ---------- navigation ---------- */
 // Home and Pricing are the two screens marked data-public in index.html — browsable
 // without an account (marketing pitch + full pricing). Reaching them the first time

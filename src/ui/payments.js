@@ -1,3 +1,11 @@
+import { isVerified } from "../state.js";
+import { goTo, openSheet, closeSheet } from "./navigation.js";
+import { renderJobs } from "./jobs.js";
+import { renderAccount } from "./account.js";
+import { renderHomeownerListingsHub } from "./homeowner.js";
+
+let pendingUnlockId = null;
+
 /* ---------- unlock & payment (real Stripe Checkout — see verify-collector/server.js) ----------
    Both flows redirect the whole page to Stripe's hosted checkout page; nothing is
    provisioned until Stripe's webhook confirms the payment server-side (see
